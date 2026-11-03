@@ -20,6 +20,7 @@ from starlette.responses import JSONResponse
 
 from app.api.v1 import auth as auth_router
 from app.api.v1 import catalogos as catalogos_router
+from app.api.v1 import favoritos as favoritos_router
 from app.api.v1 import health as health_router
 from app.api.v1 import legal as legal_router
 from app.api.v1 import notificaciones as notificaciones_router
@@ -76,6 +77,7 @@ def create_app() -> FastAPI:
     app.include_router(postulaciones_router.router, prefix=prefix)
     app.include_router(notificaciones_router.router, prefix=prefix)
     app.include_router(perfil_router.router, prefix=prefix)
+    app.include_router(favoritos_router.router, prefix=prefix)
 
     return app
 

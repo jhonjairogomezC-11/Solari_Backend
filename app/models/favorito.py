@@ -18,8 +18,9 @@ TIPO_FUNDACION = "FUNDACION"
 class VoluntarioFavorito(Base):
     __tablename__ = "voluntario_favoritos"
 
+    # La tabla no tiene default en la BD (Laravel genera el UUID en la app).
     id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, server_default=text("uuid_generate_v4()")
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
     voluntario_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("voluntarios.id", ondelete="CASCADE")
