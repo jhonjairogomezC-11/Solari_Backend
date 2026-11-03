@@ -23,6 +23,7 @@ from app.api.v1 import catalogos as catalogos_router
 from app.api.v1 import health as health_router
 from app.api.v1 import legal as legal_router
 from app.api.v1 import notificaciones as notificaciones_router
+from app.api.v1 import perfil as perfil_router
 from app.api.v1 import postulaciones as postulaciones_router
 from app.api.v1 import publicaciones as publicaciones_router
 from app.core.config import get_settings
@@ -74,6 +75,7 @@ def create_app() -> FastAPI:
     app.include_router(publicaciones_router.router, prefix=prefix)
     app.include_router(postulaciones_router.router, prefix=prefix)
     app.include_router(notificaciones_router.router, prefix=prefix)
+    app.include_router(perfil_router.router, prefix=prefix)
 
     return app
 
