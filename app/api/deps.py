@@ -74,3 +74,29 @@ def require_roles(*roles: str):
         return user
 
     return _checker
+
+
+async def get_fundacion_actual(db: DbDep, user: CurrentUser):
+    """Devuelve el perfil de Fundación del usuario autenticado (rol FUNDACION)."""
+    from app.models.usuario import ROL_FUNDACION
+
+    if user.rol != ROL_FUNDACION:
+        raise ForbiddenError("Solo las fundaciones pueden realizar esta acción.")
+    repo = UsuarioRepository(db)
+    fundacion = await repo.fundacion_por_usuario(user.id)
+    if fundacion is None:
+        raise ForbiddenError("Debes completar el perfil de tu fundación primero.")
+    return fundacion
+
+
+async def get_voluntario_actual(db: DbDep, user: CurrentUser):
+    """Devuelve el perfil de Voluntario del usuario autenticado (rol VOLUNTARIO)."""
+    from app.models.usuario import ROL_VOLUNTARIO
+
+    if user.rol != ROL_VOLUNTARIO:
+        raise ForbiddenError("Solo los voluntarios pueden realizar esta acción.")
+    repo = UsuarioRepository(db)
+    voluntario = await repo.voluntario_por_usuario(user.id)
+    if voluntario is None:
+        raise ForbiddenError("Debes completar tu perfil de voluntario primero.")
+    return voluntario

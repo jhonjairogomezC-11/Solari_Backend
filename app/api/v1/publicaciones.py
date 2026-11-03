@@ -1,0 +1,97 @@
+"""Endpoints de convocatorias (publicaciones)."""
+
+from __future__ import annotations
+
+import uuid
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, Query, Request, status
+
+from app.api.deps import DbDep, get_fundacion_actual
+from app.core.rate_limit import limiter
+from app.models.fundacion import Fundacion
+from app.schemas.publicacion import (
+    PaginatedResponse,
+    PublicacionCreate,
+    PublicacionOut,
+    PublicacionUpdate,
+)
+from app.services.publicacion_service import PublicacionService
+
+router = APIRouter(tags=["convocatorias"])
+
+FundacionDep = Annotated[Fundacion, Depends(get_fundacion_actual)]
+
+
+# ─────────────── Público ───────────────
+
+@router.get("/publicaciones", response_model=PaginatedResponse[PublicacionOut])
+async def listar_publicaciones(
+    db: DbDep,
+    categoria_id: int | None = None,
+    modalidad: str | None = None,
+    municipio_id: int | None = None,
+    buscar: str | None = Query(default=None, max_length=120),
+    page: int = Query(1, ge=1),
+    per_page: int = Query(15, ge=1, le=50),
+):
+    return await PublicacionService(db).listar_publicas(
+        categoria_id=categoria_id,
+        modalidad=modalidad,
+        municipio_id=municipio_id,
+        buscar=buscar,
+        page=page,
+        per_page=per_page,
+    )
+
+
+@router.get("/publicaciones/{publicacion_id}", response_model=PublicacionOut)
+async def detalle_publicacion(db: DbDep, publicacion_id: uuid.UUID):
+    return await PublicacionService(db).obtener_publica(publicacion_id)
+
+
+# ─────────────── Fundación ───────────────
+
+@router.get("/mis-publicaciones", response_model=PaginatedResponse[PublicacionOut])
+async def mis_publicaciones(
+    db: DbDep,
+    fundacion: FundacionDep,
+    page: int = Query(1, ge=1),
+    per_page: int = Query(15, ge=1, le=50),
+):
+    return await PublicacionService(db).mis_publicaciones(fundacion.id, page, per_page)
+
+
+@router.post("/publicaciones", response_model=PublicacionOut, status_code=status.HTTP_201_CREATED)
+@limiter.limit("30/minute")
+async def crear_publicacion(
+    request: Request,
+    db: DbDep,
+    fundacion: FundacionDep,
+    data: PublicacionCreate,
+):
+    return await PublicacionService(db).crear(fundacion.id, data)
+
+
+@router.put("/publicaciones/{publicacion_id}", response_model=PublicacionOut)
+async def actualizar_publicacion(
+    db: DbDep,
+    fundacion: FundacionDep,
+    publicacion_id: uuid.UUID,
+    data: PublicacionUpdate,
+):
+    return await PublicacionService(db).actualizar(publicacion_id, fundacion.id, data)
+
+
+@router.post("/publicaciones/{publicacion_id}/publicar", response_model=PublicacionOut)
+async def publicar_publicacion(
+    db: DbDep, fundacion: FundacionDep, publicacion_id: uuid.UUID
+):
+    return await PublicacionService(db).publicar(publicacion_id, fundacion.id)
+
+
+@router.post("/publicaciones/{publicacion_id}/cancelar", response_model=PublicacionOut)
+async def cancelar_publicacion(
+    db: DbDep, fundacion: FundacionDep, publicacion_id: uuid.UUID
+):
+    return await PublicacionService(db).cancelar(publicacion_id, fundacion.id)

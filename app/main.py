@@ -19,8 +19,12 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 
 from app.api.v1 import auth as auth_router
+from app.api.v1 import catalogos as catalogos_router
 from app.api.v1 import health as health_router
 from app.api.v1 import legal as legal_router
+from app.api.v1 import notificaciones as notificaciones_router
+from app.api.v1 import postulaciones as postulaciones_router
+from app.api.v1 import publicaciones as publicaciones_router
 from app.core.config import get_settings
 from app.core.exceptions import register_exception_handlers
 from app.core.rate_limit import limiter
@@ -66,6 +70,10 @@ def create_app() -> FastAPI:
     app.include_router(health_router.router, prefix=prefix)
     app.include_router(auth_router.router, prefix=prefix)
     app.include_router(legal_router.router, prefix=prefix)
+    app.include_router(catalogos_router.router, prefix=prefix)
+    app.include_router(publicaciones_router.router, prefix=prefix)
+    app.include_router(postulaciones_router.router, prefix=prefix)
+    app.include_router(notificaciones_router.router, prefix=prefix)
 
     return app
 

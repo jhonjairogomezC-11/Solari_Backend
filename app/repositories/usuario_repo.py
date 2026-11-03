@@ -40,5 +40,13 @@ class UsuarioRepository:
         stmt = select(Fundacion.id).where(Fundacion.nit == nit)
         return (await self.db.execute(stmt)).first() is not None
 
+    async def voluntario_por_usuario(self, usuario_id: str | uuid.UUID) -> Voluntario | None:
+        stmt = select(Voluntario).where(Voluntario.usuario_id == usuario_id)
+        return (await self.db.execute(stmt)).scalar_one_or_none()
+
+    async def fundacion_por_usuario(self, usuario_id: str | uuid.UUID) -> Fundacion | None:
+        stmt = select(Fundacion).where(Fundacion.usuario_id == usuario_id)
+        return (await self.db.execute(stmt)).scalar_one_or_none()
+
     def add(self, entidad: object) -> None:
         self.db.add(entidad)
