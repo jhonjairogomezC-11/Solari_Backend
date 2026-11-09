@@ -13,6 +13,7 @@ from app.schemas.admin import (
     AdminFundacionOut,
     AdminPostulacionOut,
     AdminUsuarioOut,
+    AdminVoluntarioOut,
     CambiarEstadoUsuario,
     CambiarRolUsuario,
     CatalogoItemCreate,
@@ -21,6 +22,7 @@ from app.schemas.admin import (
     OcultarConvocatoria,
     PaginatedAdmin,
     VerificarFundacion,
+    VerificarVoluntario,
 )
 from app.schemas.catalogo import (
     AreaImpactoOut,
@@ -132,6 +134,31 @@ async def moderar_convocatoria(
     return await AdminService(db).ocultar_convocatoria(
         publicacion_id, body.ocultar, body.motivo
     )
+
+
+# ---------------------------------------------------------------------------
+# Voluntarios (verificación de identidad)
+# ---------------------------------------------------------------------------
+@router.get("/voluntarios", response_model=PaginatedAdmin[AdminVoluntarioOut])
+async def listar_voluntarios(
+    db: DbDep,
+    _: CurrentUser,
+    page: PageQ = 1,
+    per_page: PerPageQ = 20,
+    verificado: bool | None = None,
+    con_documento: bool | None = None,
+    buscar: str | None = None,
+):
+    return await AdminService(db).listar_voluntarios(
+        page, per_page, verificado, con_documento, buscar
+    )
+
+
+@router.patch("/voluntarios/{voluntario_id}/verificacion", response_model=AdminVoluntarioOut)
+async def verificar_voluntario(
+    voluntario_id: str, body: VerificarVoluntario, db: DbDep, _: CurrentUser
+):
+    return await AdminService(db).verificar_voluntario(voluntario_id, body.verificado)
 
 
 # ---------------------------------------------------------------------------

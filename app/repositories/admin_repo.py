@@ -231,6 +231,51 @@ class AdminRepository:
         return rows, total
 
     # ------------------------------------------------------------------
+    # Voluntarios (verificación de identidad)
+    # ------------------------------------------------------------------
+    async def listar_voluntarios(
+        self, page: int, per_page: int, verificado: bool | None = None,
+        con_documento: bool | None = None, buscar: str | None = None,
+    ) -> tuple[list[tuple], int]:
+        """Devuelve filas (Voluntario, usuario_nombre, usuario_email)."""
+        condiciones = []
+        if verificado is not None:
+            condiciones.append(Voluntario.esta_verificado.is_(verificado))
+        if con_documento is True:
+            condiciones.append(Voluntario.documento_identidad.isnot(None))
+        elif con_documento is False:
+            condiciones.append(Voluntario.documento_identidad.is_(None))
+        if buscar:
+            patron = f"%{buscar.lower()}%"
+            condiciones.append(
+                func.lower(Usuario.nombre).like(patron)
+                | func.lower(Usuario.email).like(patron)
+                | func.lower(Voluntario.numero_documento).like(patron)
+            )
+
+        count_stmt = (
+            select(func.count())
+            .select_from(Voluntario)
+            .join(Usuario, Usuario.id == Voluntario.usuario_id)
+        )
+        data_stmt = (
+            select(Voluntario, Usuario.nombre, Usuario.email)
+            .join(Usuario, Usuario.id == Voluntario.usuario_id)
+            .order_by(Voluntario.fecha_creacion.desc())
+        )
+        for c in condiciones:
+            count_stmt = count_stmt.where(c)
+            data_stmt = data_stmt.where(c)
+
+        total = await self._count(count_stmt)
+        data_stmt = data_stmt.limit(per_page).offset((page - 1) * per_page)
+        rows = (await self.db.execute(data_stmt)).all()
+        return rows, total
+
+    async def voluntario_por_id(self, voluntario_id: str | uuid.UUID) -> Voluntario | None:
+        return await self.db.get(Voluntario, voluntario_id)
+
+    # ------------------------------------------------------------------
     # Catálogos
     # ------------------------------------------------------------------
     async def crear_area(self, nombre: str) -> AreaImpacto:

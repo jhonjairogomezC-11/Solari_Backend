@@ -28,6 +28,7 @@ from app.schemas.admin import (
     AdminFundacionOut,
     AdminPostulacionOut,
     AdminUsuarioOut,
+    AdminVoluntarioOut,
     ConteoPorEstado,
     DashboardStats,
     SerieTemporalPunto,
@@ -265,6 +266,36 @@ class AdminService:
             data.append(dto)
         pages = (total + per_page - 1) // per_page if per_page else 1
         return {"data": data, "total": total, "page": page, "per_page": per_page, "pages": pages}
+
+    # ------------------------------------------------------------------
+    # Voluntarios (verificación de identidad)
+    # ------------------------------------------------------------------
+    async def listar_voluntarios(self, page, per_page, verificado, con_documento, buscar):
+        rows, total = await self.repo.listar_voluntarios(
+            page, per_page, verificado, con_documento, buscar
+        )
+        data = []
+        for vol, nombre, email in rows:
+            dto = AdminVoluntarioOut.model_validate(vol)
+            dto.nombre = nombre
+            dto.email = email
+            data.append(dto)
+        pages = (total + per_page - 1) // per_page if per_page else 1
+        return {"data": data, "total": total, "page": page, "per_page": per_page, "pages": pages}
+
+    async def verificar_voluntario(self, voluntario_id: str, verificado: bool):
+        vol = await self.repo.voluntario_por_id(voluntario_id)
+        if vol is None:
+            raise NotFoundError("Voluntario no encontrado.")
+        if verificado and not vol.documento_identidad:
+            raise ConflictError("El voluntario no ha subido un documento de identidad.")
+        vol.esta_verificado = verificado
+        # Nota: no se notifica porque el enum tipo_notificacion actual no tiene un
+        # tipo apropiado para la verificación de voluntarios (requeriría migración).
+        await self.db.commit()
+        await self.db.refresh(vol)
+        dto = AdminVoluntarioOut.model_validate(vol)
+        return dto
 
     # ------------------------------------------------------------------
     # Catálogos

@@ -166,6 +166,31 @@ class AdminPostulacionOut(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Voluntarios (verificación de identidad)
+# ---------------------------------------------------------------------------
+
+
+class AdminVoluntarioOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    usuario_id: uuid.UUID
+    nombre: str | None = None
+    email: str | None = None
+    tipo_documento: str
+    numero_documento: str
+    foto_perfil: str | None = None
+    documento_identidad: str | None = None
+    esta_verificado: bool
+    fecha_creacion: datetime
+
+
+class VerificarVoluntario(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    verificado: bool
+
+
+# ---------------------------------------------------------------------------
 # Catálogos (CRUD)
 # ---------------------------------------------------------------------------
 
