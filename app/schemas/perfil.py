@@ -58,6 +58,8 @@ class VoluntarioPerfilOut(BaseModel):
     municipio_id: int
     disponibilidad: str
     experiencia: str | None = None
+    foto_perfil: str | None = None
+    documento_identidad: str | None = None
     esta_verificado: bool
     fecha_creacion: datetime
 
@@ -100,8 +102,15 @@ class FundacionPerfilOut(BaseModel):
     municipio_id: int
     descripcion: str
     pagina_web: str | None = None
+    logo: str | None = None
+    documento_legal: str | None = None
     estado_verificacion: str
     fecha_creacion: datetime
+
+
+class ArchivoSubidoOut(BaseModel):
+    """Respuesta tras subir un archivo."""
+    url: str
 
 
 class PerfilEstado(BaseModel):

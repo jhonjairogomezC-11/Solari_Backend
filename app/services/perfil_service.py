@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from fastapi import UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import ConflictError, ForbiddenError
+from app.core.config import get_settings
+from app.core.exceptions import ConflictError, ForbiddenError, NotFoundError
 from app.models.fundacion import ESTADO_PENDIENTE, Fundacion
 from app.models.usuario import ROL_FUNDACION, ROL_VOLUNTARIO, Usuario
 from app.models.voluntario import Voluntario
@@ -15,12 +17,14 @@ from app.schemas.perfil import (
     VoluntarioPerfilInput,
     VoluntarioPerfilOut,
 )
+from app.services.storage_service import StorageService
 
 
 class PerfilService:
     def __init__(self, db: AsyncSession):
         self.db = db
         self.repo = UsuarioRepository(db)
+        self.storage = StorageService(get_settings())
 
     async def estado(self, usuario: Usuario) -> bool:
         """Devuelve True si el usuario ya tiene su perfil de dominio."""
@@ -133,3 +137,41 @@ class PerfilService:
         salida = FundacionPerfilOut.model_validate(perfil)
         await self.db.commit()
         return salida
+
+    # ─────────────── Subida de archivos ───────────────
+
+    async def subir_foto_voluntario(self, usuario: Usuario, file: UploadFile) -> str:
+        if usuario.rol != ROL_VOLUNTARIO:
+            raise ForbiddenError("Solo los voluntarios pueden subir foto de perfil aquí.")
+        perfil = await self.repo.voluntario_por_usuario(usuario.id)
+        if perfil is None:
+            raise NotFoundError("Primero completa tu perfil de voluntario.")
+        url = await self.storage.guardar_imagen(file, "fotos")
+        perfil.foto_perfil = url
+        await self.db.commit()
+        return url
+
+    async def subir_documento_voluntario(self, usuario: Usuario, file: UploadFile) -> str:
+        """Sube el documento de identidad para verificación (queda pendiente de revisión)."""
+        if usuario.rol != ROL_VOLUNTARIO:
+            raise ForbiddenError("Solo los voluntarios pueden subir su documento aquí.")
+        perfil = await self.repo.voluntario_por_usuario(usuario.id)
+        if perfil is None:
+            raise NotFoundError("Primero completa tu perfil de voluntario.")
+        url = await self.storage.guardar_documento(file, "documentos")
+        perfil.documento_identidad = url
+        # Al subir un nuevo documento, la verificación vuelve a quedar pendiente.
+        perfil.esta_verificado = False
+        await self.db.commit()
+        return url
+
+    async def subir_logo_fundacion(self, usuario: Usuario, file: UploadFile) -> str:
+        if usuario.rol != ROL_FUNDACION:
+            raise ForbiddenError("Solo las fundaciones pueden subir su logo.")
+        perfil = await self.repo.fundacion_por_usuario(usuario.id)
+        if perfil is None:
+            raise NotFoundError("Primero completa el perfil de tu fundación.")
+        url = await self.storage.guardar_imagen(file, "logos")
+        perfil.logo = url
+        await self.db.commit()
+        return url

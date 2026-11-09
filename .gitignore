@@ -15,3 +15,6 @@ __pycache__/
 # Build
 dist/
 build/
+
+# Archivos subidos por usuarios (fotos, documentos) - no se versionan
+uploads/

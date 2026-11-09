@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter
+from typing import Annotated
+
+from fastapi import APIRouter, File, UploadFile
 
 from app.api.deps import CurrentUser, DbDep
 from app.core.exceptions import NotFoundError
 from app.models.usuario import ROL_FUNDACION, ROL_VOLUNTARIO
 from app.schemas.perfil import (
+    ArchivoSubidoOut,
     FundacionPerfilInput,
     FundacionPerfilOut,
     PerfilEstado,
@@ -60,3 +63,29 @@ async def guardar_perfil_fundacion(
     db: DbDep, user: CurrentUser, data: FundacionPerfilInput
 ):
     return await PerfilService(db).guardar_fundacion(user, data)
+
+
+# ─────────────── Subida de archivos ───────────────
+
+@router.post("/voluntario/foto", response_model=ArchivoSubidoOut)
+async def subir_foto_voluntario(
+    db: DbDep, user: CurrentUser, archivo: Annotated[UploadFile, File()]
+):
+    url = await PerfilService(db).subir_foto_voluntario(user, archivo)
+    return ArchivoSubidoOut(url=url)
+
+
+@router.post("/voluntario/documento", response_model=ArchivoSubidoOut)
+async def subir_documento_voluntario(
+    db: DbDep, user: CurrentUser, archivo: Annotated[UploadFile, File()]
+):
+    url = await PerfilService(db).subir_documento_voluntario(user, archivo)
+    return ArchivoSubidoOut(url=url)
+
+
+@router.post("/fundacion/logo", response_model=ArchivoSubidoOut)
+async def subir_logo_fundacion(
+    db: DbDep, user: CurrentUser, archivo: Annotated[UploadFile, File()]
+):
+    url = await PerfilService(db).subir_logo_fundacion(user, archivo)
+    return ArchivoSubidoOut(url=url)

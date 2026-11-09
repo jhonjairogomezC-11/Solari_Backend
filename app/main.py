@@ -11,8 +11,11 @@ import sys
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
+from pathlib import Path  # noqa: E402
+
 from fastapi import FastAPI  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from starlette.requests import Request
@@ -68,6 +71,11 @@ def create_app() -> FastAPI:
         )
 
     register_exception_handlers(app)
+
+    # Servir archivos subidos (fotos, documentos) de forma estática.
+    upload_path = Path(settings.upload_dir)
+    upload_path.mkdir(parents=True, exist_ok=True)
+    app.mount("/uploads", StaticFiles(directory=str(upload_path)), name="uploads")
 
     prefix = settings.api_v1_prefix
     app.include_router(health_router.router, prefix=prefix)

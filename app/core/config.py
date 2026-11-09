@@ -67,6 +67,11 @@ class Settings(BaseSettings):
     # Contraseñas
     password_min_length: int = 8
 
+    # Subida de archivos (fotos de perfil y documentos de verificación)
+    upload_dir: str = "uploads"
+    upload_max_mb: int = 5
+    upload_public_base: str = "http://localhost:8080/uploads"
+
     @field_validator("jwt_secret")
     @classmethod
     def _non_empty_secret(cls, v: str) -> str:
