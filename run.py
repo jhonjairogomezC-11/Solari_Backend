@@ -10,16 +10,19 @@ Uso:  uv run python run.py
 from __future__ import annotations
 
 import asyncio
+import os
 import sys
 
 import uvicorn
 
 
 def main() -> None:
+    host = os.getenv("SOLARY_HOST", "127.0.0.1")
+    port = int(os.getenv("SOLARY_PORT", "8001"))
     config = uvicorn.Config(
         "app.main:app",
-        host="127.0.0.1",
-        port=8001,
+        host=host,
+        port=port,
         reload=False,
         loop="asyncio",
     )

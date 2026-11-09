@@ -18,6 +18,7 @@ from slowapi.middleware import SlowAPIMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
+from app.api.v1 import admin as admin_router
 from app.api.v1 import auth as auth_router
 from app.api.v1 import catalogos as catalogos_router
 from app.api.v1 import favoritos as favoritos_router
@@ -78,6 +79,7 @@ def create_app() -> FastAPI:
     app.include_router(notificaciones_router.router, prefix=prefix)
     app.include_router(perfil_router.router, prefix=prefix)
     app.include_router(favoritos_router.router, prefix=prefix)
+    app.include_router(admin_router.router, prefix=prefix)
 
     return app
 
