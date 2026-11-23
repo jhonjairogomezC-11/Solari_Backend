@@ -192,6 +192,9 @@ class PublicacionOut(BaseModel):
     programacion_id: uuid.UUID | None = None
     habilidades: list[HabilidadOut] = []
     imagenes: list[PublicacionImagenOut] = []
+    # Solo en las vistas de la propia organización.
+    postulaciones_total: int | None = None
+    postulaciones_pendientes: int | None = None
     # Personalización para el voluntario autenticado (None si no aplica).
     coincidencia: int | None = None
     habilidades_coinciden: list[int] = []

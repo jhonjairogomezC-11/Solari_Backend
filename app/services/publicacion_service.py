@@ -6,7 +6,7 @@ import math
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from fastapi import UploadFile
@@ -17,6 +17,9 @@ from app.models.fundacion import Fundacion
 from app.models.gamificacion import PublicacionImagen
 from app.models.habilidades import MAX_HABILIDADES, MIN_HABILIDADES
 from app.models.organizacion import VD_VERIFICADA
+from app.models.postulacion import ESTADO_EN_REVISION as ESTADO_POST_EN_REVISION
+from app.models.postulacion import ESTADO_PENDIENTE as ESTADO_POST_PENDIENTE
+from app.models.postulacion import Postulacion
 from app.models.publicacion import (
     ESTADO_BORRADOR,
     ESTADO_CANCELADA,
@@ -178,8 +181,39 @@ class PublicacionService:
                     sujeto="La actividad",
                 )
         pub = await self.repo.actualizar(pub, campos, data.habilidades)
-        salida = _to_out(pub)
+        salida = (await self._enriquecer([pub], None))[0]
         await self.db.commit()
+        return salida
+
+    async def obtener_propia(
+        self, publicacion_id: uuid.UUID, fundacion_id: uuid.UUID
+    ) -> PublicacionOut:
+        """Detalle para la organización dueña, en cualquier estado (para editar)."""
+        pub = await self.repo.por_id_con_habilidades(publicacion_id)
+        if pub is None or pub.fundacion_id != fundacion_id:
+            raise NotFoundError("Convocatoria no encontrada.")
+        return (await self._con_conteos(await self._enriquecer([pub], None)))[0]
+
+    async def _con_conteos(self, salida: list[PublicacionOut]) -> list[PublicacionOut]:
+        """Agrega el total de postulaciones y las pendientes de revisar."""
+        if not salida:
+            return salida
+        filas = (
+            await self.db.execute(
+                select(Postulacion.publicacion_id, Postulacion.estado, func.count())
+                .where(Postulacion.publicacion_id.in_([s.id for s in salida]))
+                .group_by(Postulacion.publicacion_id, Postulacion.estado)
+            )
+        ).all()
+        totales: dict[uuid.UUID, int] = {}
+        pendientes: dict[uuid.UUID, int] = {}
+        for pid, estado, n in filas:
+            totales[pid] = totales.get(pid, 0) + n
+            if estado in (ESTADO_POST_PENDIENTE, ESTADO_POST_EN_REVISION):
+                pendientes[pid] = pendientes.get(pid, 0) + n
+        for s in salida:
+            s.postulaciones_total = totales.get(s.id, 0)
+            s.postulaciones_pendientes = pendientes.get(s.id, 0)
         return salida
 
     async def publicar(self, publicacion_id: uuid.UUID, fundacion_id: uuid.UUID) -> PublicacionOut:
@@ -215,7 +249,7 @@ class PublicacionService:
     ) -> PaginatedResponse[PublicacionOut]:
         filas, total = await self.repo.listar_de_fundacion(fundacion_id, page, per_page)
         return PaginatedResponse(
-            data=[_to_out(f) for f in filas],
+            data=await self._con_conteos(await self._enriquecer(filas, None)),
             total=total,
             page=page,
             per_page=per_page,

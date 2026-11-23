@@ -68,6 +68,11 @@ async def mis_publicaciones(
     return await PublicacionService(db).mis_publicaciones(fundacion.id, page, per_page)
 
 
+@router.get("/mis-publicaciones/{publicacion_id}", response_model=PublicacionOut)
+async def mi_publicacion(db: DbDep, fundacion: FundacionDep, publicacion_id: uuid.UUID):
+    return await PublicacionService(db).obtener_propia(publicacion_id, fundacion.id)
+
+
 @router.post("/publicaciones", response_model=PublicacionOut, status_code=status.HTTP_201_CREATED)
 @limiter.limit("30/minute")
 async def crear_publicacion(

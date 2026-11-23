@@ -292,3 +292,75 @@ público de la organización y el filtro de Explorar.
 - Aún no se pueden agregar fotos a una convocatoria ya creada desde la pantalla (el endpoint existe).
 - TanStack Query está instalado pero sin uso.
 - `docs/SOLARI-SUSTENTACION.md` todavía menciona el puerto 8080 y 11 áreas de impacto; los valores actuales son 9000 y 32.
+
+---
+
+## 9. Docker
+
+`docker-compose.yml` (en este repo) levanta tres servicios:
+
+| Servicio | Qué hace | Puerto en el equipo |
+|---|---|---|
+| `db` | PostgreSQL 16 con la base `voluntapp`. En el primer arranque ejecuta el script SQL de `DB_INIT_SQL` | `5433` (para no chocar con un PostgreSQL local en 5432) |
+| `backend` | Imagen de este repo (`Dockerfile`, Python 3.14 + uv). Ejecuta `alembic upgrade head` y luego `uvicorn app.main:app` en `0.0.0.0:9000` | `9000` |
+| `frontend` | Imagen del repo del frontend: compila con Vite y sirve `dist/` con nginx (con *fallback* de SPA) | `5173` |
+
+Volúmenes con nombre: `pgdata` (datos de PostgreSQL), `uploads` y `private_uploads`
+(archivos subidos; los privados nunca se sirven por `/uploads`).
+
+### Arranque
+
+```powershell
+cd "Solary backend"
+copy .env.docker.example .env.docker   # cambiar POSTGRES_PASSWORD, DATABASE_URL y JWT_SECRET
+docker compose up --build
+```
+
+- Frontend: `http://localhost:5173` · API: `http://localhost:9000/api/v1` · Docs: `http://localhost:9000/docs`.
+- `.env.docker` está en `.gitignore`; no lo subas. El backend no arranca si `JWT_SECRET`
+  sigue empezando por `cambia-esto`.
+- En el contenedor no se usa `run.py`: en Linux el *event loop* por defecto funciona con psycopg async.
+
+### Variables opcionales de `docker-compose.yml`
+
+Se leen de la shell (o de un `.env` junto al compose, que Docker Compose usa solo para
+interpolar):
+
+| Variable | Valor por defecto | Uso |
+|---|---|---|
+| `DB_INIT_SQL` | `../Proyecto/voluntapp_mvp.sql` | Script SQL que crea la base la primera vez |
+| `FRONTEND_DIR` | `../Solary frontend` | Carpeta del repo del frontend (contexto de build) |
+| `VITE_API_BASE_URL` | `http://localhost:9000/api/v1` | URL de la API que se incrusta en el bundle del frontend |
+| `VITE_GOOGLE_CLIENT_ID` | vacío | Client ID de Google para el frontend |
+
+Ejemplo en PowerShell: `$env:DB_INIT_SQL="C:\ruta\voluntapp_dump.sql"; docker compose up --build`.
+
+### Base de datos inicial
+
+El script de `DB_INIT_SQL` solo se ejecuta cuando el volumen `pgdata` está vacío.
+Para repetir la carga: `docker compose down -v` (**borra** los datos y archivos de los volúmenes).
+
+**Importante:** `voluntapp_mvp.sql` no contiene todas las tablas que crearon después las
+migraciones de Laravel (`Proyecto/database/migrations`), por ejemplo `refresh_tokens`,
+gamificación, `publicacion_imagenes` o favoritos. La migración Alembic `0001` modifica
+`refresh_tokens`, así que con ese script solo `alembic upgrade head` falla y el backend
+no arranca. Lo recomendado es exportar la base local completa y usarla como script inicial:
+
+```powershell
+pg_dump -U postgres -h 127.0.0.1 -d voluntapp --no-owner --no-privileges -f voluntapp_dump.sql
+$env:DB_INIT_SQL="$PWD\voluntapp_dump.sql"
+docker compose up --build
+```
+
+El volcado incluye la tabla `alembic_version`, así que Alembic solo aplica las migraciones
+que falten. No subas el volcado a ningún repositorio: contiene cuentas y datos personales.
+
+### Integración continua
+
+Cada repo tiene `.github/workflows/ci.yml` (push y PR a `master`):
+
+- Backend: `uv sync`, `ruff check app tests` y las pruebas que no necesitan base de datos
+  (se excluyen `tests/integration` y `tests/test_auth_flow.py`). Ruff ignora por ahora
+  `E501,I001,C416,C408,S608,S311`, que tienen errores previos en el código; hay que quitar
+  cada código de la lista cuando se corrija.
+- Frontend: Node 22, `npm ci`, `npm run lint`, `npm run build`.

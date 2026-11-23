@@ -15,9 +15,6 @@ import asyncio
 import random
 import sys
 
-if sys.platform == "win32":
-    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-
 from sqlalchemy import func, insert, select  # noqa: E402
 
 from app.db.session import AsyncSessionLocal  # noqa: E402
@@ -185,4 +182,8 @@ async def main() -> None:
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    # psycopg async en Windows necesita SelectorEventLoop (el Proactor no sirve).
+    if sys.platform == "win32":
+        asyncio.run(main(), loop_factory=asyncio.SelectorEventLoop)
+    else:
+        asyncio.run(main())

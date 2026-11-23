@@ -1,0 +1,59 @@
+# Entorno completo de Solari: PostgreSQL + backend FastAPI + frontend (nginx).
+# Uso: copy .env.docker.example .env.docker  →  docker compose up --build
+#
+# Variables opcionales (en la shell o en un .env junto a este archivo):
+#   DB_INIT_SQL        script SQL para crear la base la primera vez (default ../Proyecto/voluntapp_mvp.sql)
+#   FRONTEND_DIR       carpeta del repo del frontend (default "../Solary frontend")
+#   VITE_API_BASE_URL  URL de la API vista desde el navegador (default http://localhost:9000/api/v1)
+
+services:
+  db:
+    image: postgres:16
+    env_file: .env.docker
+    environment:
+      POSTGRES_DB: voluntapp
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # Solo se ejecuta cuando el volumen pgdata está vacío (primer arranque).
+      - ${DB_INIT_SQL:-../Proyecto/voluntapp_mvp.sql}:/docker-entrypoint-initdb.d/01-init.sql:ro
+    ports:
+      - "5433:5432"
+    healthcheck:
+      # 127.0.0.1 a propósito: durante la carga inicial el servidor temporal solo
+      # escucha por socket, así que el healthcheck no pasa hasta terminar el script.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U $${POSTGRES_USER:-postgres} -d voluntapp"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    restart: unless-stopped
+
+  backend:
+    build: .
+    env_file: .env.docker
+    depends_on:
+      db:
+        condition: service_healthy
+    command: ["sh", "-c", "alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port 9000"]
+    volumes:
+      - uploads:/app/uploads
+      - private_uploads:/app/private_uploads
+    ports:
+      - "9000:9000"
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ${FRONTEND_DIR:-../Solary frontend}
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:9000/api/v1}
+        VITE_GOOGLE_CLIENT_ID: ${VITE_GOOGLE_CLIENT_ID:-}
+    depends_on:
+      - backend
+    ports:
+      - "5173:80"
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  uploads:
+  private_uploads:

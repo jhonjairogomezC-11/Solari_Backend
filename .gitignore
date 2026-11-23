@@ -11,6 +11,7 @@ __pycache__/
 # Secretos
 .env
 .env.local
+.env.docker
 
 # Build
 dist/

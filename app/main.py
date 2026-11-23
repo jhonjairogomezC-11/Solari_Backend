@@ -25,19 +25,20 @@ from app.api.v1 import admin as admin_router
 from app.api.v1 import admin_gestion as admin_gestion_router
 from app.api.v1 import archivos as archivos_router
 from app.api.v1 import auth as auth_router
-from app.api.v1 import habilidades as habilidades_router
-from app.api.v1 import ofrecimientos as ofrecimientos_router
-from app.api.v1 import organizaciones as organizaciones_router
-from app.api.v1 import programaciones as programaciones_router
 from app.api.v1 import catalogos as catalogos_router
+from app.api.v1 import certificados as certificados_router
 from app.api.v1 import cuenta as cuenta_router
 from app.api.v1 import favoritos as favoritos_router
 from app.api.v1 import gamificacion as gamificacion_router
+from app.api.v1 import habilidades as habilidades_router
 from app.api.v1 import health as health_router
 from app.api.v1 import legal as legal_router
 from app.api.v1 import notificaciones as notificaciones_router
+from app.api.v1 import ofrecimientos as ofrecimientos_router
+from app.api.v1 import organizaciones as organizaciones_router
 from app.api.v1 import perfil as perfil_router
 from app.api.v1 import postulaciones as postulaciones_router
+from app.api.v1 import programaciones as programaciones_router
 from app.api.v1 import publicaciones as publicaciones_router
 from app.api.v1 import soporte as soporte_router
 from app.core.config import get_settings
@@ -109,6 +110,7 @@ def create_app() -> FastAPI:
     app.include_router(catalogos_router.router, prefix=prefix)
     app.include_router(publicaciones_router.router, prefix=prefix)
     app.include_router(postulaciones_router.router, prefix=prefix)
+    app.include_router(certificados_router.router, prefix=prefix)
     app.include_router(notificaciones_router.router, prefix=prefix)
     app.include_router(perfil_router.router, prefix=prefix)
     app.include_router(favoritos_router.router, prefix=prefix)
