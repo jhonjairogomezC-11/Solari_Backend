@@ -7,10 +7,15 @@ import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import NotFoundError
-from app.models.favorito import TIPO_PUBLICACION
+from app.models.favorito import TIPO_FUNDACION, TIPO_PUBLICACION
+from app.models.fundacion import Fundacion
 from app.repositories.favorito_repo import FavoritoRepository
 from app.repositories.publicacion_repo import PublicacionRepository
-from app.schemas.favorito import FavoritoConvocatoriaOut
+from app.schemas.favorito import (
+    FavoritoConvocatoriaOut,
+    FavoritoFundacionOut,
+    FundacionResumenFav,
+)
 from app.schemas.publicacion import PublicacionOut
 
 
@@ -45,9 +50,32 @@ class FavoritoService:
             await self.repo.eliminar(existente)
             await self.db.commit()
             return False
+        fundacion = await self.db.get(Fundacion, fundacion_id)
+        if fundacion is None:
+            raise NotFoundError("Fundación no encontrada.")
         await self.repo.crear_fundacion(voluntario_id, fundacion_id)
         await self.db.commit()
         return True
+
+    async def listar_fundaciones(
+        self, voluntario_id: uuid.UUID
+    ) -> list[FavoritoFundacionOut]:
+        favs = await self.repo.listar(voluntario_id, TIPO_FUNDACION)
+        salida: list[FavoritoFundacionOut] = []
+        for fav in favs:
+            if fav.fundacion_id is None:
+                continue
+            fundacion = await self.db.get(Fundacion, fav.fundacion_id)
+            if fundacion is None:
+                continue
+            salida.append(
+                FavoritoFundacionOut(
+                    id=fav.id,
+                    fecha_creacion=fav.fecha_creacion,
+                    fundacion=FundacionResumenFav.model_validate(fundacion),
+                )
+            )
+        return salida
 
     async def ids_publicaciones(self, voluntario_id: uuid.UUID) -> list[str]:
         ids = await self.repo.ids_publicaciones(voluntario_id)

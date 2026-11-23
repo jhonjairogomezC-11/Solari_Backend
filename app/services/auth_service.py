@@ -43,7 +43,7 @@ from app.schemas.auth import (
 from app.services.legal_service import LegalService
 from app.services.token_service import TokenService
 
-logger = logging.getLogger("solary.auth")
+logger = logging.getLogger("solari.auth")
 
 # Mensaje genérico para no revelar si un email existe.
 _GENERIC_INVALID_CREDS = "Correo o contraseña incorrectos."
@@ -137,7 +137,7 @@ class AuthService:
 
         if await self.repo.por_email_local(data.email):
             raise ConflictError(_GENERIC_REGISTER_CONFLICT)
-        if await self.repo.existe_nit(data.nit):
+        if data.nit and await self.repo.existe_nit(data.nit):
             raise ConflictError(_GENERIC_REGISTER_CONFLICT)
 
         usuario = Usuario(
@@ -157,6 +157,8 @@ class AuthService:
             usuario_id=usuario.id,
             nombre=data.nombre_fundacion,
             nit=data.nit,
+            tipo_organizacion=data.tipo_organizacion,
+            constituida_legalmente=data.constituida_legalmente,
             representante_legal=data.representante_legal,
             correo_institucional=data.correo_institucional,
             telefono=data.telefono_contacto,
@@ -247,7 +249,7 @@ class AuthService:
         enlace = f"{self.settings.frontend_verify_url}?token={raw}"
         Mailer(self.settings).send(
             to=usuario.email,
-            subject="Verifica tu correo en Solary",
+            subject="Verifica tu correo en Solari",
             body=(
                 f"Hola {usuario.nombre},\n\n"
                 f"Confirma tu correo visitando: {enlace}\n\n"
@@ -279,7 +281,7 @@ class AuthService:
         enlace = f"{self.settings.frontend_reset_url}?token={raw}"
         Mailer(self.settings).send(
             to=usuario.email,
-            subject="Restablece tu contraseña de Solary",
+            subject="Restablece tu contraseña de Solari",
             body=(
                 f"Hola {usuario.nombre},\n\n"
                 f"Para crear una contraseña nueva visita: {enlace}\n\n"

@@ -15,7 +15,7 @@ from email.message import EmailMessage
 
 from app.core.config import Settings
 
-logger = logging.getLogger("solary.mail")
+logger = logging.getLogger("solari.mail")
 
 
 class Mailer:

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlalchemy import ForeignKey, Integer, String
+from sqlalchemy import Boolean, ForeignKey, Integer, String, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -41,3 +41,9 @@ class Habilidad(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     nombre: Mapped[str] = mapped_column(String(100), unique=True)
+    # Categoría temática del catálogo (cuidado animal, salud y bienestar, etc.).
+    categoria: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    # Distingue habilidades profesionales/técnicas de las generales o de apoyo.
+    es_profesional: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=text("false")
+    )

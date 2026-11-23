@@ -32,6 +32,10 @@ _estado_pub_enum = ENUM(
     "CERRADA", "CANCELADA", "COMPLETADA", "FINALIZADA",
     name="estado_publicacion", create_type=False,
 )
+_dificultad_enum = ENUM(
+    "FACIL", "MEDIA", "DIFICIL", "MUY_DIFICIL",
+    name="dificultad_tipo", create_type=False,
+)
 
 # Estados de publicación como constantes
 ESTADO_BORRADOR = "BORRADOR"
@@ -94,10 +98,43 @@ class Publicacion(Base):
     edad_maxima: Mapped[int | None] = mapped_column(Integer, nullable=True)
     requisitos_adicionales: Mapped[str | None] = mapped_column(Text, nullable=True)
     imagen: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    # ── Campos ricos de la convocatoria (aditivos, nullable) ──
+    objetivo: Mapped[str | None] = mapped_column(Text, nullable=True)
+    impacto_esperado: Mapped[str | None] = mapped_column(Text, nullable=True)
+    actividades_voluntario: Mapped[str | None] = mapped_column(Text, nullable=True)
+    perfil_beneficiarios: Mapped[str | None] = mapped_column(Text, nullable=True)
+    que_llevar: Mapped[str | None] = mapped_column(Text, nullable=True)
+    recomendaciones: Mapped[str | None] = mapped_column(Text, nullable=True)
+    incluye_transporte: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=text("false")
+    )
+    incluye_alimentacion: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=text("false")
+    )
+    incluye_seguro: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=text("false")
+    )
+    politica_cancelacion: Mapped[str | None] = mapped_column(Text, nullable=True)
+    otorga_certificado: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=text("false")
+    )
+    horas_reconocidas: Mapped[int] = mapped_column(
+        Integer, default=0, server_default=text("0")
+    )
+    nivel_experiencia: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    fecha_limite_postulacion: Mapped[date | None] = mapped_column(Date, nullable=True)
+    # Si la convocatoria fue generada por una programación recurrente.
+    programacion_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("programaciones_recurrentes.id", ondelete="SET NULL"),
+        nullable=True,
+    )
     contacto_nombre: Mapped[str | None] = mapped_column(String(150), nullable=True)
     contacto_email: Mapped[str | None] = mapped_column(String(150), nullable=True)
     contacto_telefono: Mapped[str | None] = mapped_column(String(20), nullable=True)
     estado: Mapped[str] = mapped_column(_estado_pub_enum, default=ESTADO_BORRADOR)
+    dificultad: Mapped[str] = mapped_column(_dificultad_enum, default="FACIL")
+    urgente: Mapped[bool] = mapped_column(Boolean, default=False)
     oculta_por_admin: Mapped[bool] = mapped_column(Boolean, default=False)
     motivo_ocultamiento: Mapped[str | None] = mapped_column(Text, nullable=True)
     fecha_ocultamiento: Mapped[datetime | None] = mapped_column(nullable=True)

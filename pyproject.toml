@@ -1,7 +1,7 @@
 [project]
-name = "solary-backend"
+name = "solari-backend"
 version = "0.1.0"
-description = "Backend de autenticación de Solary migrado a Python (FastAPI)"
+description = "Backend de autenticación de Solari migrado a Python (FastAPI)"
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [

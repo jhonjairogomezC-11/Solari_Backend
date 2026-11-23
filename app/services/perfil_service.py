@@ -63,27 +63,45 @@ class PerfilService:
                 disponibilidad=data.disponibilidad,
                 experiencia=data.experiencia,
             )
+            self._aplicar_editables(perfil, data)
             self.db.add(perfil)
         else:
-            # Actualizar: el documento solo cambia si no colisiona.
+            # Actualizar: los campos de identidad son INMUTABLES. Si el cliente
+            # envía valores distintos, se rechaza para evitar cambios silenciosos.
             if (
                 data.numero_documento != existente.numero_documento
-                and await self.repo.existe_numero_documento(data.numero_documento)
+                or data.tipo_documento != existente.tipo_documento
+                or data.fecha_nacimiento != existente.fecha_nacimiento
+                or data.genero != existente.genero
             ):
-                raise ConflictError("Ese número de documento ya está registrado.")
-            existente.tipo_documento = data.tipo_documento
-            existente.numero_documento = data.numero_documento
-            existente.fecha_nacimiento = data.fecha_nacimiento
-            existente.genero = data.genero
+                raise ForbiddenError(
+                    "Los datos de identidad (documento, fecha de nacimiento y género) "
+                    "no se pueden modificar desde el perfil. Solicita una corrección "
+                    "al equipo de soporte."
+                )
             existente.municipio_id = data.municipio_id
             existente.disponibilidad = data.disponibilidad
             existente.experiencia = data.experiencia
+            self._aplicar_editables(existente, data)
             perfil = existente
 
         await self.db.flush()
         salida = VoluntarioPerfilOut.model_validate(perfil)
         await self.db.commit()
         return salida
+
+    @staticmethod
+    def _aplicar_editables(perfil: Voluntario, data: VoluntarioPerfilInput) -> None:
+        """Copia los campos editables ampliados del perfil."""
+        perfil.direccion = data.direccion
+        perfil.descripcion = data.descripcion
+        perfil.telefono_contacto = data.telefono_contacto
+        perfil.nivel_educativo = data.nivel_educativo
+        perfil.profesion = data.profesion
+        perfil.idiomas = data.idiomas
+        perfil.preferencia_modalidad = data.preferencia_modalidad
+        perfil.contacto_emergencia_nombre = data.contacto_emergencia_nombre
+        perfil.contacto_emergencia_telefono = data.contacto_emergencia_telefono
 
     # ─────────────── Fundación ───────────────
 
@@ -101,12 +119,14 @@ class PerfilService:
         existente = await self.repo.fundacion_por_usuario(usuario.id)
 
         if existente is None:
-            if await self.repo.existe_nit(data.nit):
+            if data.nit and await self.repo.existe_nit(data.nit):
                 raise ConflictError("Ese NIT ya está registrado.")
             perfil = Fundacion(
                 usuario_id=usuario.id,
                 nombre=data.nombre_fundacion,
                 nit=data.nit,
+                tipo_organizacion=data.tipo_organizacion,
+                constituida_legalmente=data.constituida_legalmente,
                 representante_legal=data.representante_legal,
                 correo_institucional=data.correo_institucional,
                 telefono=data.telefono_contacto,
@@ -119,10 +139,12 @@ class PerfilService:
             )
             self.db.add(perfil)
         else:
-            if data.nit != existente.nit and await self.repo.existe_nit(data.nit):
+            if data.nit and data.nit != existente.nit and await self.repo.existe_nit(data.nit):
                 raise ConflictError("Ese NIT ya está registrado.")
             existente.nombre = data.nombre_fundacion
             existente.nit = data.nit
+            existente.tipo_organizacion = data.tipo_organizacion
+            existente.constituida_legalmente = data.constituida_legalmente
             existente.representante_legal = data.representante_legal
             existente.correo_institucional = data.correo_institucional
             existente.telefono = data.telefono_contacto
@@ -158,8 +180,11 @@ class PerfilService:
         perfil = await self.repo.voluntario_por_usuario(usuario.id)
         if perfil is None:
             raise NotFoundError("Primero completa tu perfil de voluntario.")
+        # Almacenamiento PRIVADO: solo el dueño y los administradores pueden verlo.
+        anterior = perfil.documento_identidad
         url = await self.storage.guardar_documento(file, "documentos")
         perfil.documento_identidad = url
+        self.storage.eliminar_privado(anterior)
         # Al subir un nuevo documento, la verificación vuelve a quedar pendiente.
         perfil.esta_verificado = False
         await self.db.commit()

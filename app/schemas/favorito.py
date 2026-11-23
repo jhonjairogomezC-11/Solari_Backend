@@ -25,5 +25,22 @@ class FavoritoConvocatoriaOut(BaseModel):
     convocatoria: PublicacionOut
 
 
+class FundacionResumenFav(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: uuid.UUID
+    nombre: str
+    logo: str | None = None
+    descripcion: str | None = None
+    municipio_id: int | None = None
+    estado_verificacion: str | None = None
+
+
+class FavoritoFundacionOut(BaseModel):
+    """Favorito de fundación con la fundación embebida."""
+    id: uuid.UUID
+    fecha_creacion: datetime
+    fundacion: FundacionResumenFav
+
+
 class ToggleResult(BaseModel):
     favorito: bool

@@ -41,5 +41,22 @@ class Voluntario(Base):
     disponibilidad: Mapped[str] = mapped_column(_disp_enum)
     experiencia: Mapped[str | None] = mapped_column(Text, nullable=True)
     foto_perfil: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    # ── Campos de perfil ampliado (aditivos, todos nullable) ──
+    direccion: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    descripcion: Mapped[str | None] = mapped_column(Text, nullable=True)
+    telefono_contacto: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    nivel_educativo: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    profesion: Mapped[str | None] = mapped_column(String(150), nullable=True)
+    idiomas: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    preferencia_modalidad: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    contacto_emergencia_nombre: Mapped[str | None] = mapped_column(String(150), nullable=True)
+    contacto_emergencia_telefono: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    # ── Estadísticas de trayectoria (aditivas, con default) ──
+    # Los puntos (XP) viven en `voluntario_puntos`; aquí solo cacheamos horas y
+    # actividades completadas para lecturas rápidas de perfil/ranking.
+    horas_acumuladas: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
+    actividades_completadas: Mapped[int] = mapped_column(
+        Integer, default=0, server_default=text("0")
+    )
     fecha_creacion: Mapped[datetime] = mapped_column(server_default=text("CURRENT_TIMESTAMP"))
     fecha_actualizacion: Mapped[datetime] = mapped_column(server_default=text("CURRENT_TIMESTAMP"))

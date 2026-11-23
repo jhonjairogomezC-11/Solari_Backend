@@ -13,7 +13,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import SQLAlchemyError
 
-logger = logging.getLogger("solary.errors")
+logger = logging.getLogger("solari.errors")
 
 # Código de validación (evita la constante deprecada de starlette en 3.16).
 HTTP_422 = 422

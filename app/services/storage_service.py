@@ -28,6 +28,12 @@ _IMAGE_SIGNATURES: dict[bytes, str] = {
 }
 _PDF_SIGNATURE = b"%PDF-"
 
+# Carpetas servidas públicamente (imágenes de perfil, logos, galerías...).
+CARPETAS_PUBLICAS = ("fotos", "logos", "ofrecimientos", "galeria", "convocatorias")
+# Carpetas privadas: solo accesibles mediante el endpoint autenticado.
+CARPETAS_PRIVADAS = ("documentos", "verificacion")
+PRIVADO_PREFIJO = "/archivos/privado"
+
 
 def _detect_image_ext(head: bytes) -> str | None:
     for sig, ext in _IMAGE_SIGNATURES.items():
@@ -70,7 +76,11 @@ class StorageService:
         return self._guardar(carpeta, contenido, ext)
 
     async def guardar_documento(self, file: UploadFile, carpeta: str) -> str:
-        """Acepta imágenes o PDF (para documentos de identidad / legales)."""
+        """Acepta imágenes o PDF y los guarda en almacenamiento PRIVADO.
+
+        Devuelve la ruta de la API que entrega el archivo solo a su dueño o a un
+        administrador (`/archivos/privado/<carpeta>/<nombre>`); nunca una URL pública.
+        """
         contenido = await self._read_validated(file)
         head = contenido[:16]
         ext = _detect_image_ext(head)
@@ -78,4 +88,19 @@ class StorageService:
             ext = "pdf"
         if ext is None:
             raise AppError("Formato no válido. Usa una imagen (JPG, PNG) o un PDF.")
-        return self._guardar(carpeta, contenido, ext)
+        destino_dir = Path(self.settings.private_upload_dir) / carpeta
+        destino_dir.mkdir(parents=True, exist_ok=True)
+        nombre = f"{secrets.token_urlsafe(16)}.{ext}"
+        (destino_dir / nombre).write_bytes(contenido)
+        return f"{PRIVADO_PREFIJO}/{carpeta}/{nombre}"
+
+    def ruta_privada(self, carpeta: str, nombre: str) -> Path:
+        return Path(self.settings.private_upload_dir) / carpeta / nombre
+
+    def eliminar_privado(self, referencia: str | None) -> None:
+        """Borra un archivo privado a partir de su referencia de API (mejor esfuerzo)."""
+        if not referencia or not referencia.startswith(PRIVADO_PREFIJO + "/"):
+            return
+        partes = referencia.removeprefix(PRIVADO_PREFIJO + "/").split("/")
+        if len(partes) == 2 and partes[0] in CARPETAS_PRIVADAS:
+            self.ruta_privada(partes[0], partes[1]).unlink(missing_ok=True)

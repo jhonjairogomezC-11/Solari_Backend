@@ -1,6 +1,6 @@
 # Guía de instalación y operación (Windows)
 
-Backend de autenticación de Solary en Python/FastAPI. Coexiste con el backend
+Backend de autenticación de Solari en Python/FastAPI. Coexiste con el backend
 Laravel usando la misma base de datos PostgreSQL.
 
 ## 1. Requisitos

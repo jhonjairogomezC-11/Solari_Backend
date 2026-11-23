@@ -34,7 +34,7 @@ from app.repositories.usuario_repo import UsuarioRepository
 from app.schemas.auth import TokenResponse
 from app.services.auth_service import AuthService
 
-logger = logging.getLogger("solary.google")
+logger = logging.getLogger("solari.google")
 
 _GOOGLE_ISSUERS = {"accounts.google.com", "https://accounts.google.com"}
 

@@ -96,7 +96,7 @@ class AdminFundacionOut(BaseModel):
     id: uuid.UUID
     usuario_id: uuid.UUID
     nombre: str
-    nit: str
+    nit: str | None = None
     representante_legal: str
     correo_institucional: str | None = None
     telefono: str
@@ -104,8 +104,11 @@ class AdminFundacionOut(BaseModel):
     municipio_id: int
     pagina_web: str | None = None
     descripcion: str
-    documento_legal: str
+    documento_legal: str | None = None
     logo: str | None = None
+    tipo_organizacion: str = "FUNDACION"
+    constituida_legalmente: bool = True
+    verificacion_documental: str = "NO_SOLICITADA"
     estado_verificacion: str
     fecha_verificacion: datetime | None = None
     motivo_rechazo: str | None = None
@@ -203,6 +206,13 @@ class CatalogoItemCreate(BaseModel):
 class CatalogoItemUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
     nombre: str = Field(min_length=2, max_length=120)
+
+
+class HabilidadCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    nombre: str = Field(min_length=2, max_length=100)
+    categoria: str | None = Field(default=None, max_length=60)
+    es_profesional: bool = False
 
 
 class MunicipioCreate(BaseModel):

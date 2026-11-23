@@ -7,7 +7,7 @@ import uuid
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.postulacion import ESTADO_PENDIENTE, Postulacion
+from app.models.postulacion import ESTADO_LISTA_ESPERA, ESTADO_PENDIENTE, Postulacion
 
 
 class PostulacionRepository:
@@ -22,12 +22,16 @@ class PostulacionRepository:
         return (await self.db.execute(stmt)).first() is not None
 
     async def crear(
-        self, publicacion_id: uuid.UUID, voluntario_id: uuid.UUID, mensaje: str | None
+        self,
+        publicacion_id: uuid.UUID,
+        voluntario_id: uuid.UUID,
+        mensaje: str | None,
+        lista_espera: bool = False,
     ) -> Postulacion:
         post = Postulacion(
             publicacion_id=publicacion_id,
             voluntario_id=voluntario_id,
-            estado=ESTADO_PENDIENTE,
+            estado=ESTADO_LISTA_ESPERA if lista_espera else ESTADO_PENDIENTE,
             mensaje_voluntario=mensaje,
         )
         self.db.add(post)
@@ -66,6 +70,13 @@ class PostulacionRepository:
         )
         filas = list((await self.db.execute(stmt)).scalars().all())
         return filas, total
+
+    async def contar_por_estado(self, publicacion_id: uuid.UUID, estado: str) -> int:
+        stmt = select(func.count()).select_from(Postulacion).where(
+            Postulacion.publicacion_id == publicacion_id,
+            Postulacion.estado == estado,
+        )
+        return (await self.db.execute(stmt)).scalar_one()
 
     async def contar_aceptadas(self, publicacion_id: uuid.UUID) -> int:
         from app.models.postulacion import ESTADO_ACEPTADO, ESTADO_ASISTIO

@@ -26,3 +26,5 @@ class HabilidadOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
     nombre: str
+    categoria: str | None = None
+    es_profesional: bool = False

@@ -22,6 +22,7 @@ from app.models.usuario import (
     ROL_FUNDACION,
     ROL_VOLUNTARIO,
 )
+from app.models.admin_accion import HistorialEstadoVoluntario
 from app.repositories.admin_repo import AdminRepository
 from app.schemas.admin import (
     AdminConvocatoriaOut,
@@ -33,7 +34,20 @@ from app.schemas.admin import (
     DashboardStats,
     SerieTemporalPunto,
 )
+from app.services.auditoria_service import AuditoriaService
 from app.services.notificacion_service import NotificacionService
+
+_ACCION_POR_ESTADO_USUARIO = {
+    ESTADO_SUSPENDIDO: "USUARIO_SUSPENDIDO",
+    ESTADO_BLOQUEADO: "USUARIO_BLOQUEADO",
+    ESTADO_ACTIVO: "USUARIO_REACTIVADO",
+}
+_ACCION_POR_ESTADO_FUNDACION = {
+    ESTADO_APROBADA: "FUNDACION_APROBADA",
+    ESTADO_RECHAZADA: "FUNDACION_RECHAZADA",
+    ESTADO_SUSPENDIDA: "FUNDACION_SUSPENDIDA",
+    ESTADO_PENDIENTE: "FUNDACION_REACTIVADA",
+}
 
 _ESTADOS_USUARIO = {ESTADO_ACTIVO, ESTADO_BLOQUEADO, ESTADO_SUSPENDIDO}
 _ROLES = {ROL_VOLUNTARIO, ROL_FUNDACION, ROL_ADMIN}
@@ -45,6 +59,7 @@ class AdminService:
         self.db = db
         self.repo = AdminRepository(db)
         self.notif = NotificacionService(db)
+        self.audit = AuditoriaService(db)
 
     # ------------------------------------------------------------------
     # Dashboard
@@ -118,11 +133,22 @@ class AdminService:
         if usuario.rol == ROL_ADMIN:
             raise ForbiddenError("No se puede modificar el estado de otro administrador.")
 
+        anterior = usuario.estado
         usuario.estado = estado
         usuario.fecha_actualizacion = datetime.utcnow()
-        # Nota: no se notifica el cambio de estado de cuenta porque no existe un
-        # tipo de notificación para ello y un usuario bloqueado/suspendido no
-        # podría iniciar sesión para verla. El motivo queda en el log de auditoría.
+        # Un usuario bloqueado/suspendido no podría iniciar sesión para ver una
+        # notificación; el motivo queda en el historial y en la auditoría.
+        self.db.add(
+            HistorialEstadoVoluntario(
+                usuario_id=usuario.id, estado_anterior=anterior, estado_nuevo=estado,
+                motivo=motivo, admin_id=await self.audit.perfil_admin_id(admin_id),
+            )
+        )
+        await self.audit.registrar(
+            admin_id, _ACCION_POR_ESTADO_USUARIO[estado], objeto_tipo="usuario",
+            objeto_id=usuario.id, descripcion=usuario.email,
+            anterior={"estado": anterior}, nuevo={"estado": estado}, motivo=motivo,
+        )
         await self.db.commit()
         await self.db.refresh(usuario)
         tiene, pid, verif = await self.repo.perfil_de_usuario(usuario)
@@ -139,8 +165,13 @@ class AdminService:
         if str(usuario.id) == str(admin_id):
             raise ForbiddenError("No puedes cambiar tu propio rol.")
 
+        rol_anterior = usuario.rol
         usuario.rol = rol
         usuario.fecha_actualizacion = datetime.utcnow()
+        await self.audit.registrar(
+            admin_id, "USUARIO_EDITADO", objeto_tipo="usuario", objeto_id=usuario.id,
+            descripcion=usuario.email, anterior={"rol": rol_anterior}, nuevo={"rol": rol},
+        )
         await self.db.commit()
         await self.db.refresh(usuario)
         tiene, pid, verif = await self.repo.perfil_de_usuario(usuario)
@@ -165,7 +196,9 @@ class AdminService:
             raise NotFoundError("Fundación no encontrada.")
         return AdminFundacionOut.model_validate(f)
 
-    async def verificar_fundacion(self, fundacion_id: str, estado: str, motivo: str | None):
+    async def verificar_fundacion(
+        self, admin_id: uuid.UUID, fundacion_id: str, estado: str, motivo: str | None
+    ):
         if estado not in _ESTADOS_VERIF:
             raise ConflictError(f"Estado inválido. Debe ser uno de {sorted(_ESTADOS_VERIF)}.")
         f = await self.repo.fundacion_por_id(fundacion_id)
@@ -174,6 +207,12 @@ class AdminService:
         if estado in (ESTADO_RECHAZADA, ESTADO_SUSPENDIDA) and not motivo:
             raise ConflictError("Debes indicar un motivo para rechazar o suspender.")
 
+        estado_anterior = f.estado_verificacion
+        await self.audit.registrar(
+            admin_id, _ACCION_POR_ESTADO_FUNDACION[estado], objeto_tipo="fundacion",
+            objeto_id=f.id, descripcion=f.nombre, anterior={"estado": estado_anterior},
+            nuevo={"estado": estado}, motivo=motivo,
+        )
         f.estado_verificacion = estado
         f.fecha_verificacion = datetime.utcnow()
         f.motivo_rechazo = motivo if estado in (ESTADO_RECHAZADA, ESTADO_SUSPENDIDA) else None
@@ -221,12 +260,20 @@ class AdminService:
         pages = (total + per_page - 1) // per_page if per_page else 1
         return {"data": data, "total": total, "page": page, "per_page": per_page, "pages": pages}
 
-    async def ocultar_convocatoria(self, pub_id: str, ocultar: bool, motivo: str | None):
+    async def ocultar_convocatoria(
+        self, admin_id: uuid.UUID, pub_id: str, ocultar: bool, motivo: str | None
+    ):
         pub = await self.repo.convocatoria_por_id(pub_id)
         if pub is None:
             raise NotFoundError("Convocatoria no encontrada.")
         if ocultar and not motivo:
             raise ConflictError("Debes indicar un motivo para ocultar la convocatoria.")
+        await self.audit.registrar(
+            admin_id, "PUBLICACION_OCULTADA" if ocultar else "PUBLICACION_RESTAURADA",
+            objeto_tipo="publicacion", objeto_id=pub.id, descripcion=pub.titulo,
+            anterior={"oculta": pub.oculta_por_admin}, nuevo={"oculta": ocultar},
+            motivo=motivo,
+        )
 
         pub.oculta_por_admin = ocultar
         pub.motivo_ocultamiento = motivo if ocultar else None
@@ -283,12 +330,18 @@ class AdminService:
         pages = (total + per_page - 1) // per_page if per_page else 1
         return {"data": data, "total": total, "page": page, "per_page": per_page, "pages": pages}
 
-    async def verificar_voluntario(self, voluntario_id: str, verificado: bool):
+    async def verificar_voluntario(
+        self, admin_id: uuid.UUID, voluntario_id: str, verificado: bool
+    ):
         vol = await self.repo.voluntario_por_id(voluntario_id)
         if vol is None:
             raise NotFoundError("Voluntario no encontrado.")
         if verificado and not vol.documento_identidad:
             raise ConflictError("El voluntario no ha subido un documento de identidad.")
+        await self.audit.registrar(
+            admin_id, "VOLUNTARIO_VERIFICADO", objeto_tipo="voluntario", objeto_id=vol.id,
+            anterior={"verificado": vol.esta_verificado}, nuevo={"verificado": verificado},
+        )
         vol.esta_verificado = verificado
         # Nota: no se notifica porque el enum tipo_notificacion actual no tiene un
         # tipo apropiado para la verificación de voluntarios (requeriría migración).
@@ -300,26 +353,41 @@ class AdminService:
     # ------------------------------------------------------------------
     # Catálogos
     # ------------------------------------------------------------------
-    async def crear_area(self, nombre: str):
+    async def _auditar_catalogo(self, admin_id: uuid.UUID, tipo: str, nombre: str) -> None:
+        await self.audit.registrar(
+            admin_id, "CATALOGO_MODIFICADO", objeto_tipo=tipo, descripcion=nombre,
+            nuevo={"nombre": nombre, "accion": "crear"},
+        )
+
+    async def crear_area(self, admin_id: uuid.UUID, nombre: str):
         area = await self.repo.crear_area(nombre)
+        await self._auditar_catalogo(admin_id, "area_impacto", nombre)
         await self.db.commit()
         await self.db.refresh(area)
         return area
 
-    async def crear_habilidad(self, nombre: str):
+    async def crear_habilidad(
+        self, admin_id: uuid.UUID, nombre: str,
+        categoria: str | None = None, es_profesional: bool = False,
+    ):
         hab = await self.repo.crear_habilidad(nombre)
+        hab.categoria = categoria
+        hab.es_profesional = es_profesional
+        await self._auditar_catalogo(admin_id, "habilidad", nombre)
         await self.db.commit()
         await self.db.refresh(hab)
         return hab
 
-    async def crear_departamento(self, nombre: str):
+    async def crear_departamento(self, admin_id: uuid.UUID, nombre: str):
         dep = await self.repo.crear_departamento(nombre)
+        await self._auditar_catalogo(admin_id, "departamento", nombre)
         await self.db.commit()
         await self.db.refresh(dep)
         return dep
 
-    async def crear_municipio(self, nombre: str, departamento_id: int):
+    async def crear_municipio(self, admin_id: uuid.UUID, nombre: str, departamento_id: int):
         mun = await self.repo.crear_municipio(nombre, departamento_id)
+        await self._auditar_catalogo(admin_id, "municipio", nombre)
         await self.db.commit()
         await self.db.refresh(mun)
         return mun

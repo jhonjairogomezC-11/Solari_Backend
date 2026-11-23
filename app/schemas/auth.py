@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from datetime import date
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 
 from app.core.config import get_settings
 
@@ -156,16 +156,19 @@ class RegisterFundacionRequest(BaseModel):
     # `rol` aceptado por compatibilidad móvil pero ignorado (ver nota en voluntario).
     rol: str | None = None
 
-    # Datos de perfil de fundación.
+    # Datos de perfil de la organización. Si no está constituida legalmente (refugio
+    # independiente, colectivo) NIT y documento legal son opcionales (R13).
     nombre_fundacion: str = Field(min_length=1, max_length=150)
-    nit: str = Field(max_length=20)
+    tipo_organizacion: str = "FUNDACION"
+    constituida_legalmente: bool = True
+    nit: str | None = Field(default=None, max_length=20)
     representante_legal: str = Field(min_length=1, max_length=150)
     correo_institucional: EmailStr | None = None
     telefono_contacto: str = Field(max_length=20)
     direccion: str = Field(min_length=1, max_length=200)
     municipio_id: int
     descripcion: str = Field(min_length=1)
-    documento_legal: str = Field(min_length=1)
+    documento_legal: str | None = None
     pagina_web: str | None = Field(default=None, max_length=255)
 
     aceptaciones: list[AceptacionLegalInput] = Field(default_factory=list)
@@ -175,16 +178,37 @@ class RegisterFundacionRequest(BaseModel):
     def _password_fuerte(cls, v: str) -> str:
         return _validar_fortaleza_password(v)
 
+    @field_validator("tipo_organizacion")
+    @classmethod
+    def _tipo_org(cls, v: str) -> str:
+        validos = ("FUNDACION", "REFUGIO", "COLECTIVO", "INICIATIVA_CIUDADANA", "OTRA")
+        if v not in validos:
+            raise ValueError(f"tipo_organizacion inválido. Valores: {validos}")
+        return v
+
+    @field_validator("nit", "documento_legal", mode="before")
+    @classmethod
+    def _vacio_a_none(cls, v: object) -> object:
+        return None if isinstance(v, str) and not v.strip() else v
+
     @field_validator("nit")
     @classmethod
-    def _nit_formato(cls, v: str) -> str:
+    def _nit_formato(cls, v: str | None) -> str | None:
         import re
 
-        if not re.fullmatch(r"\d{7,10}-\d", v):
+        if v is not None and not re.fullmatch(r"\d{7,10}-\d", v):
             raise ValueError(
                 "El NIT debe tener el formato 000000000-0 (7 a 10 dígitos y dígito verificador)."
             )
         return v
+
+    @model_validator(mode="after")
+    def _constituida_requiere_documentos(self) -> RegisterFundacionRequest:
+        if self.constituida_legalmente and not (self.nit and self.documento_legal):
+            raise ValueError(
+                "Una organización constituida legalmente debe indicar NIT y documento legal."
+            )
+        return self
 
     def passwords_coinciden(self) -> bool:
         return self.password == self.password_confirmation

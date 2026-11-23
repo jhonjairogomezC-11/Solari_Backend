@@ -18,6 +18,7 @@ from app.schemas.admin import (
     CambiarRolUsuario,
     CatalogoItemCreate,
     DashboardStats,
+    HabilidadCreate,
     MunicipioCreate,
     OcultarConvocatoria,
     PaginatedAdmin,
@@ -106,9 +107,11 @@ async def obtener_fundacion(fundacion_id: str, db: DbDep, _: CurrentUser):
 
 @router.patch("/fundaciones/{fundacion_id}/verificacion", response_model=AdminFundacionOut)
 async def verificar_fundacion(
-    fundacion_id: str, body: VerificarFundacion, db: DbDep, _: CurrentUser
+    fundacion_id: str, body: VerificarFundacion, db: DbDep, admin: CurrentUser
 ):
-    return await AdminService(db).verificar_fundacion(fundacion_id, body.estado, body.motivo)
+    return await AdminService(db).verificar_fundacion(
+        admin.id, fundacion_id, body.estado, body.motivo
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -129,10 +132,10 @@ async def listar_convocatorias(
 
 @router.patch("/convocatorias/{publicacion_id}/moderacion", response_model=AdminConvocatoriaOut)
 async def moderar_convocatoria(
-    publicacion_id: str, body: OcultarConvocatoria, db: DbDep, _: CurrentUser
+    publicacion_id: str, body: OcultarConvocatoria, db: DbDep, admin: CurrentUser
 ):
     return await AdminService(db).ocultar_convocatoria(
-        publicacion_id, body.ocultar, body.motivo
+        admin.id, publicacion_id, body.ocultar, body.motivo
     )
 
 
@@ -156,9 +159,9 @@ async def listar_voluntarios(
 
 @router.patch("/voluntarios/{voluntario_id}/verificacion", response_model=AdminVoluntarioOut)
 async def verificar_voluntario(
-    voluntario_id: str, body: VerificarVoluntario, db: DbDep, _: CurrentUser
+    voluntario_id: str, body: VerificarVoluntario, db: DbDep, admin: CurrentUser
 ):
-    return await AdminService(db).verificar_voluntario(voluntario_id, body.verificado)
+    return await AdminService(db).verificar_voluntario(admin.id, voluntario_id, body.verificado)
 
 
 # ---------------------------------------------------------------------------
@@ -179,20 +182,22 @@ async def listar_postulaciones(
 # Catálogos (CRUD aditivo)
 # ---------------------------------------------------------------------------
 @router.post("/catalogos/areas-impacto", response_model=AreaImpactoOut, status_code=201)
-async def crear_area(body: CatalogoItemCreate, db: DbDep, _: CurrentUser):
-    return await AdminService(db).crear_area(body.nombre)
+async def crear_area(body: CatalogoItemCreate, db: DbDep, admin: CurrentUser):
+    return await AdminService(db).crear_area(admin.id, body.nombre)
 
 
 @router.post("/catalogos/habilidades", response_model=HabilidadOut, status_code=201)
-async def crear_habilidad(body: CatalogoItemCreate, db: DbDep, _: CurrentUser):
-    return await AdminService(db).crear_habilidad(body.nombre)
+async def crear_habilidad(body: HabilidadCreate, db: DbDep, admin: CurrentUser):
+    return await AdminService(db).crear_habilidad(
+        admin.id, body.nombre, body.categoria, body.es_profesional
+    )
 
 
 @router.post("/catalogos/departamentos", response_model=DepartamentoOut, status_code=201)
-async def crear_departamento(body: CatalogoItemCreate, db: DbDep, _: CurrentUser):
-    return await AdminService(db).crear_departamento(body.nombre)
+async def crear_departamento(body: CatalogoItemCreate, db: DbDep, admin: CurrentUser):
+    return await AdminService(db).crear_departamento(admin.id, body.nombre)
 
 
 @router.post("/catalogos/municipios", response_model=MunicipioOut, status_code=201)
-async def crear_municipio(body: MunicipioCreate, db: DbDep, _: CurrentUser):
-    return await AdminService(db).crear_municipio(body.nombre, body.departamento_id)
+async def crear_municipio(body: MunicipioCreate, db: DbDep, admin: CurrentUser):
+    return await AdminService(db).crear_municipio(admin.id, body.nombre, body.departamento_id)

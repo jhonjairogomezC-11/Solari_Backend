@@ -5,11 +5,12 @@ from __future__ import annotations
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query, Request, status
+from fastapi import APIRouter, Depends, File, Query, Request, UploadFile, status
 
-from app.api.deps import DbDep, get_fundacion_actual
+from app.api.deps import DbDep, get_fundacion_actual, get_voluntario_opcional
 from app.core.rate_limit import limiter
 from app.models.fundacion import Fundacion
+from app.models.voluntario import Voluntario
 from app.schemas.publicacion import (
     PaginatedResponse,
     PublicacionCreate,
@@ -21,6 +22,7 @@ from app.services.publicacion_service import PublicacionService
 router = APIRouter(tags=["convocatorias"])
 
 FundacionDep = Annotated[Fundacion, Depends(get_fundacion_actual)]
+VoluntarioOpt = Annotated[Voluntario | None, Depends(get_voluntario_opcional)]
 
 
 # ─────────────── Público ───────────────
@@ -28,6 +30,7 @@ FundacionDep = Annotated[Fundacion, Depends(get_fundacion_actual)]
 @router.get("/publicaciones", response_model=PaginatedResponse[PublicacionOut])
 async def listar_publicaciones(
     db: DbDep,
+    voluntario: VoluntarioOpt,
     categoria_id: int | None = None,
     modalidad: str | None = None,
     municipio_id: int | None = None,
@@ -40,14 +43,17 @@ async def listar_publicaciones(
         modalidad=modalidad,
         municipio_id=municipio_id,
         buscar=buscar,
+        voluntario_id=voluntario.id if voluntario else None,
         page=page,
         per_page=per_page,
     )
 
 
 @router.get("/publicaciones/{publicacion_id}", response_model=PublicacionOut)
-async def detalle_publicacion(db: DbDep, publicacion_id: uuid.UUID):
-    return await PublicacionService(db).obtener_publica(publicacion_id)
+async def detalle_publicacion(db: DbDep, voluntario: VoluntarioOpt, publicacion_id: uuid.UUID):
+    return await PublicacionService(db).obtener_publica(
+        publicacion_id, voluntario.id if voluntario else None
+    )
 
 
 # ─────────────── Fundación ───────────────
@@ -81,6 +87,25 @@ async def actualizar_publicacion(
     data: PublicacionUpdate,
 ):
     return await PublicacionService(db).actualizar(publicacion_id, fundacion.id, data)
+
+
+@router.post("/publicaciones/{publicacion_id}/imagenes", response_model=PublicacionOut)
+async def subir_imagen_publicacion(
+    db: DbDep,
+    fundacion: FundacionDep,
+    publicacion_id: uuid.UUID,
+    archivo: Annotated[UploadFile, File()],
+):
+    return await PublicacionService(db).subir_imagen(publicacion_id, fundacion.id, archivo)
+
+
+@router.delete(
+    "/publicaciones/{publicacion_id}/imagenes/{imagen_id}", response_model=PublicacionOut
+)
+async def eliminar_imagen_publicacion(
+    db: DbDep, fundacion: FundacionDep, publicacion_id: uuid.UUID, imagen_id: uuid.UUID
+):
+    return await PublicacionService(db).eliminar_imagen(publicacion_id, fundacion.id, imagen_id)
 
 
 @router.post("/publicaciones/{publicacion_id}/publicar", response_model=PublicacionOut)

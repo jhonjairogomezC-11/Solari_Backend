@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import Float, case, cast, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models.catalogo import Habilidad
+from app.models.habilidades import VoluntarioHabilidad
 from app.models.postulacion import Postulacion
-from app.models.publicacion import ESTADO_PUBLICADA, Publicacion
+from app.models.publicacion import ESTADO_PUBLICADA, Publicacion, publicacion_habilidades
 
 
 class PublicacionRepository:
@@ -30,6 +31,7 @@ class PublicacionRepository:
         modalidad: str | None = None,
         municipio_id: int | None = None,
         buscar: str | None = None,
+        voluntario_id: uuid.UUID | None = None,
         page: int = 1,
         per_page: int = 15,
     ) -> tuple[list[Publicacion], int]:
@@ -62,15 +64,55 @@ class PublicacionRepository:
             select(Publicacion)
             .options(selectinload(Publicacion.habilidades))
             .where(*condiciones)
-            .order_by(Publicacion.fecha_inicio)
-            .offset((page - 1) * per_page)
-            .limit(per_page)
         )
+        if voluntario_id is not None:
+            # La coincidencia ORDENA las oportunidades pero no excluye ninguna (R2):
+            # primero las que más habilidades requeridas comparten con el voluntario.
+            req = (
+                select(func.count())
+                .select_from(publicacion_habilidades)
+                .where(publicacion_habilidades.c.publicacion_id == Publicacion.id)
+                .correlate(Publicacion)
+                .scalar_subquery()
+            )
+            coincide = (
+                select(func.count())
+                .select_from(publicacion_habilidades)
+                .where(
+                    publicacion_habilidades.c.publicacion_id == Publicacion.id,
+                    publicacion_habilidades.c.habilidad_id.in_(
+                        select(VoluntarioHabilidad.habilidad_id).where(
+                            VoluntarioHabilidad.voluntario_id == voluntario_id
+                        )
+                    ),
+                )
+                .correlate(Publicacion)
+                .scalar_subquery()
+            )
+            puntaje = case((req > 0, cast(coincide, Float) * 100.0 / req), else_=0.0)
+            stmt = stmt.order_by(puntaje.desc(), Publicacion.fecha_inicio)
+        else:
+            stmt = stmt.order_by(Publicacion.fecha_inicio)
+        stmt = stmt.offset((page - 1) * per_page).limit(per_page)
         filas = list((await self.db.execute(stmt)).scalars().all())
         return filas, total
 
     async def por_id(self, publicacion_id: uuid.UUID) -> Publicacion | None:
         return await self.db.get(Publicacion, publicacion_id)
+
+    async def por_id_bloqueada(self, publicacion_id: uuid.UUID) -> Publicacion | None:
+        """Obtiene la publicación con bloqueo de fila (FOR UPDATE).
+
+        Serializa a los voluntarios que intentan ocupar el último cupo a la vez:
+        hasta que la transacción actual no termine, otra no puede leer-para-actualizar
+        la misma fila, evitando la condición de carrera.
+        """
+        stmt = (
+            select(Publicacion)
+            .where(Publicacion.id == publicacion_id)
+            .with_for_update()
+        )
+        return (await self.db.execute(stmt)).scalar_one_or_none()
 
     async def por_id_con_habilidades(self, publicacion_id: uuid.UUID) -> Publicacion | None:
         stmt = (

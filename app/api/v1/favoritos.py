@@ -9,7 +9,11 @@ from fastapi import APIRouter, Depends
 
 from app.api.deps import DbDep, get_voluntario_actual
 from app.models.voluntario import Voluntario
-from app.schemas.favorito import FavoritoConvocatoriaOut, ToggleResult
+from app.schemas.favorito import (
+    FavoritoConvocatoriaOut,
+    FavoritoFundacionOut,
+    ToggleResult,
+)
 from app.services.favorito_service import FavoritoService
 
 router = APIRouter(prefix="/favoritos", tags=["favoritos"])
@@ -20,6 +24,11 @@ VoluntarioDep = Annotated[Voluntario, Depends(get_voluntario_actual)]
 @router.get("/convocatorias", response_model=list[FavoritoConvocatoriaOut])
 async def listar_convocatorias_favoritas(db: DbDep, voluntario: VoluntarioDep):
     return await FavoritoService(db).listar_convocatorias(voluntario.id)
+
+
+@router.get("/fundaciones", response_model=list[FavoritoFundacionOut])
+async def listar_fundaciones_favoritas(db: DbDep, voluntario: VoluntarioDep):
+    return await FavoritoService(db).listar_fundaciones(voluntario.id)
 
 
 @router.get("/ids", response_model=list[str])

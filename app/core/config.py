@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     )
 
     # Aplicación
-    app_name: str = "Solary"
+    app_name: str = "Solari"
     app_env: str = "local"
     app_debug: bool = False
     api_v1_prefix: str = "/api/v1"
@@ -55,8 +55,8 @@ class Settings(BaseSettings):
     mail_username: str = ""
     mail_password: str = ""
     mail_use_tls: bool = False
-    mail_from_address: str = "noreply@solary.co"
-    mail_from_name: str = "Solary"
+    mail_from_address: str = "noreply@solari.co"
+    mail_from_name: str = "Solari"
     frontend_reset_url: str = "http://localhost:5173/reset-password"
     frontend_verify_url: str = "http://localhost:5173/verify-email"
 
@@ -69,8 +69,10 @@ class Settings(BaseSettings):
 
     # Subida de archivos (fotos de perfil y documentos de verificación)
     upload_dir: str = "uploads"
+    # Documentos de identidad y de verificación: NUNCA se sirven de forma pública.
+    private_upload_dir: str = "private_uploads"
     upload_max_mb: int = 5
-    upload_public_base: str = "http://localhost:8080/uploads"
+    upload_public_base: str = "http://localhost:9000/uploads"
 
     @field_validator("jwt_secret")
     @classmethod

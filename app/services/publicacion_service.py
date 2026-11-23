@@ -6,9 +6,17 @@ import math
 import uuid
 from datetime import UTC, datetime
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from fastapi import UploadFile
+
+from app.core.config import get_settings
 from app.core.exceptions import ConflictError, ForbiddenError, NotFoundError
+from app.models.fundacion import Fundacion
+from app.models.gamificacion import PublicacionImagen
+from app.models.habilidades import MAX_HABILIDADES, MIN_HABILIDADES
+from app.models.organizacion import VD_VERIFICADA
 from app.models.publicacion import (
     ESTADO_BORRADOR,
     ESTADO_CANCELADA,
@@ -18,11 +26,18 @@ from app.models.publicacion import (
 )
 from app.repositories.publicacion_repo import PublicacionRepository
 from app.schemas.publicacion import (
+    FundacionResumen,
     PaginatedResponse,
     PublicacionCreate,
+    PublicacionImagenOut,
     PublicacionOut,
     PublicacionUpdate,
 )
+from app.services.coincidencia import calcular_coincidencia
+from app.services.habilidad_service import HabilidadService
+from app.services.storage_service import StorageService
+
+MAX_IMAGENES = 8
 
 
 def _now() -> datetime:
@@ -39,6 +54,55 @@ class PublicacionService:
         self.db = db
         self.repo = PublicacionRepository(db)
 
+    async def _enriquecer(
+        self, pubs: list[Publicacion], voluntario_id: uuid.UUID | None
+    ) -> list[PublicacionOut]:
+        """Añade la organización y, si hay voluntario, la coincidencia de habilidades."""
+        vol_hab: set[int] | None = None
+        if voluntario_id is not None:
+            vol_hab = set(await HabilidadService(self.db).ids_de_voluntario(voluntario_id))
+
+        galerias: dict[uuid.UUID, list[PublicacionImagen]] = {}
+        if pubs:
+            for img in (
+                await self.db.execute(
+                    select(PublicacionImagen)
+                    .where(PublicacionImagen.publicacion_id.in_([p.id for p in pubs]))
+                    .order_by(PublicacionImagen.orden, PublicacionImagen.fecha_creacion)
+                )
+            ).scalars().all():
+                galerias.setdefault(img.publicacion_id, []).append(img)
+
+        ids = {p.fundacion_id for p in pubs}
+        fundaciones: dict[uuid.UUID, Fundacion] = {}
+        if ids:
+            filas = (
+                await self.db.execute(select(Fundacion).where(Fundacion.id.in_(ids)))
+            ).scalars().all()
+            fundaciones = {f.id: f for f in filas}
+
+        salida: list[PublicacionOut] = []
+        for pub in pubs:
+            out = _to_out(pub)
+            out.imagenes = [
+                PublicacionImagenOut.model_validate(i) for i in galerias.get(pub.id, [])
+            ]
+            requeridas = [h.id for h in pub.habilidades]
+            if vol_hab is not None:
+                out.coincidencia = calcular_coincidencia(requeridas, vol_hab)
+                out.habilidades_coinciden = [i for i in requeridas if i in vol_hab]
+            f = fundaciones.get(pub.fundacion_id)
+            if f is not None:
+                out.fundacion = FundacionResumen(
+                    id=f.id,
+                    nombre=f.nombre,
+                    logo=f.logo,
+                    verificada=f.verificacion_documental == VD_VERIFICADA,
+                    tipo_organizacion=f.tipo_organizacion,
+                )
+            salida.append(out)
+        return salida
+
     async def listar_publicas(
         self,
         *,
@@ -48,33 +112,41 @@ class PublicacionService:
         buscar: str | None,
         page: int,
         per_page: int,
+        voluntario_id: uuid.UUID | None = None,
     ) -> PaginatedResponse[PublicacionOut]:
         filas, total = await self.repo.listar_publicas(
             categoria_id=categoria_id,
             modalidad=modalidad,
             municipio_id=municipio_id,
             buscar=buscar,
+            voluntario_id=voluntario_id,
             page=page,
             per_page=per_page,
         )
         return PaginatedResponse(
-            data=[_to_out(f) for f in filas],
+            data=await self._enriquecer(filas, voluntario_id),
             total=total,
             page=page,
             per_page=per_page,
             pages=math.ceil(total / per_page) if per_page else 1,
         )
 
-    async def obtener_publica(self, publicacion_id: uuid.UUID) -> PublicacionOut:
+    async def obtener_publica(
+        self, publicacion_id: uuid.UUID, voluntario_id: uuid.UUID | None = None
+    ) -> PublicacionOut:
         pub = await self.repo.por_id_con_habilidades(publicacion_id)
         if pub is None or pub.estado != ESTADO_PUBLICADA or pub.oculta_por_admin:
             raise NotFoundError("Convocatoria no encontrada.")
-        return _to_out(pub)
+        return (await self._enriquecer([pub], voluntario_id))[0]
 
     async def crear(self, fundacion_id: uuid.UUID, data: PublicacionCreate) -> PublicacionOut:
         payload = data.model_dump(exclude={"habilidades"})
         payload["fundacion_id"] = fundacion_id
         payload["estado"] = ESTADO_BORRADOR
+        if data.habilidades:
+            await HabilidadService(self.db).validar_ids(
+                data.habilidades, minimo=1, maximo=MAX_HABILIDADES, sujeto="La actividad"
+            )
         pub = await self.repo.crear(payload, data.habilidades)
         salida = _to_out(pub)
         await self.db.commit()
@@ -96,6 +168,15 @@ class PublicacionService:
         if pub.estado in (ESTADO_CANCELADA,):
             raise ConflictError("No se puede editar una convocatoria cancelada.")
         campos = data.model_dump(exclude_unset=True, exclude={"habilidades"})
+        if data.habilidades is not None:
+            minimo = MIN_HABILIDADES if pub.estado == ESTADO_PUBLICADA else 0
+            if data.habilidades or minimo:
+                await HabilidadService(self.db).validar_ids(
+                    data.habilidades,
+                    minimo=minimo or 1,
+                    maximo=MAX_HABILIDADES,
+                    sujeto="La actividad",
+                )
         pub = await self.repo.actualizar(pub, campos, data.habilidades)
         salida = _to_out(pub)
         await self.db.commit()
@@ -105,6 +186,11 @@ class PublicacionService:
         pub = await self._pub_de_fundacion(publicacion_id, fundacion_id)
         if pub.estado not in (ESTADO_BORRADOR, ESTADO_PENDIENTE_APROBACION):
             raise ConflictError("Solo se puede publicar una convocatoria en borrador.")
+        if not MIN_HABILIDADES <= len(pub.habilidades) <= MAX_HABILIDADES:
+            raise ConflictError(
+                f"Para publicar, la actividad debe exigir entre {MIN_HABILIDADES} y "
+                f"{MAX_HABILIDADES} habilidades del catálogo."
+            )
         pub.estado = ESTADO_PUBLICADA
         pub.fecha_publicacion = _now()
         await self.db.flush()
@@ -135,6 +221,54 @@ class PublicacionService:
             per_page=per_page,
             pages=math.ceil(total / per_page) if per_page else 1,
         )
+
+    async def subir_imagen(
+        self, publicacion_id: uuid.UUID, fundacion_id: uuid.UUID, archivo: UploadFile
+    ) -> PublicacionOut:
+        pub = await self._pub_de_fundacion(publicacion_id, fundacion_id)
+        existentes = list(
+            (
+                await self.db.execute(
+                    select(PublicacionImagen).where(PublicacionImagen.publicacion_id == pub.id)
+                )
+            ).scalars().all()
+        )
+        if len(existentes) >= MAX_IMAGENES:
+            raise ConflictError(f"Máximo {MAX_IMAGENES} fotografías por convocatoria.")
+        url = await StorageService(get_settings()).guardar_imagen(archivo, "convocatorias")
+        orden = max((i.orden for i in existentes), default=-1) + 1
+        self.db.add(PublicacionImagen(publicacion_id=pub.id, ruta=url, orden=orden))
+        if not existentes:
+            pub.imagen = url  # portada para tarjetas y listados
+        pub.fecha_actualizacion = _now()
+        await self.db.flush()
+        salida = (await self._enriquecer([pub], None))[0]
+        await self.db.commit()
+        return salida
+
+    async def eliminar_imagen(
+        self, publicacion_id: uuid.UUID, fundacion_id: uuid.UUID, imagen_id: uuid.UUID
+    ) -> PublicacionOut:
+        pub = await self._pub_de_fundacion(publicacion_id, fundacion_id)
+        img = await self.db.get(PublicacionImagen, imagen_id)
+        if img is None or img.publicacion_id != pub.id:
+            raise NotFoundError("Fotografía no encontrada.")
+        await self.db.delete(img)
+        await self.db.flush()
+        primera = (
+            await self.db.execute(
+                select(PublicacionImagen.ruta)
+                .where(PublicacionImagen.publicacion_id == pub.id)
+                .order_by(PublicacionImagen.orden, PublicacionImagen.fecha_creacion)
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        pub.imagen = primera
+        pub.fecha_actualizacion = _now()
+        await self.db.flush()
+        salida = (await self._enriquecer([pub], None))[0]
+        await self.db.commit()
+        return salida
 
     def _ensure_owner(self, pub: Publicacion, fundacion_id: uuid.UUID) -> None:
         if pub.fundacion_id != fundacion_id:

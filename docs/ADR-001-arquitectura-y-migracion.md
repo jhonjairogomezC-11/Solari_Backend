@@ -2,7 +2,7 @@
 
 Estado: Aceptado (Fase 1)
 Fecha: 2026-10-24
-Autores: Equipo Solary
+Autores: Equipo Solari
 
 Este documento registra las decisiones arquitectónicas de la Fase 1 (autenticación,
 registro y seguridad) del nuevo backend en Python, y cómo coexiste con el backend
@@ -121,7 +121,7 @@ Respuesta de login/register (claves EXACTAS que el móvil parsea):
 
 ### D1 — Servicio FastAPI independiente, misma BD
 
-Nuevo servicio en `Solary backend/`, apuntando a la **misma** base PostgreSQL
+Nuevo servicio en `Solari backend/`, apuntando a la **misma** base PostgreSQL
 `voluntapp`. No se modifica Laravel. Ambos pueden escribir las mismas tablas.
 
 ### D2 — Compatibilidad JWT por secreto compartido (HS256)

@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import ForeignKey, SmallInteger, Text, text
+from sqlalchemy import ForeignKey, SmallInteger, String, Text, text
 from sqlalchemy.dialects.postgresql import ENUM, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -13,6 +13,7 @@ from app.db.base import Base
 
 _estado_post_enum = ENUM(
     "PENDIENTE", "ACEPTADO", "RECHAZADO", "RETIRADO", "ASISTIO", "NO_ASISTIO",
+    "EN_REVISION", "LISTA_ESPERA", "CANCELADO_FUNDACION",
     name="estado_postulacion", create_type=False,
 )
 
@@ -22,6 +23,30 @@ ESTADO_RECHAZADO = "RECHAZADO"
 ESTADO_RETIRADO = "RETIRADO"
 ESTADO_ASISTIO = "ASISTIO"
 ESTADO_NO_ASISTIO = "NO_ASISTIO"
+ESTADO_EN_REVISION = "EN_REVISION"
+ESTADO_LISTA_ESPERA = "LISTA_ESPERA"
+ESTADO_CANCELADO_FUNDACION = "CANCELADO_FUNDACION"
+
+
+class PostulacionHistorial(Base):
+    """Registro de cada cambio de estado de una postulación y quién lo hizo (R8)."""
+
+    __tablename__ = "postulacion_historial"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    postulacion_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("postulaciones.id", ondelete="CASCADE")
+    )
+    estado_anterior: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    estado_nuevo: Mapped[str] = mapped_column(String(30))
+    cambiado_por: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("usuarios.id", ondelete="SET NULL"), nullable=True
+    )
+    rol_actor: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    motivo: Mapped[str | None] = mapped_column(Text, nullable=True)
+    fecha: Mapped[datetime] = mapped_column(server_default=text("CURRENT_TIMESTAMP"))
 
 
 class Postulacion(Base):

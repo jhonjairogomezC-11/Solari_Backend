@@ -17,10 +17,10 @@ import uvicorn
 
 
 def main() -> None:
-    host = os.getenv("SOLARY_HOST", "127.0.0.1")
-    # Puerto 8080 por defecto (el 8001 cae en el rango excluido por Windows/Hyper-V
-    # en algunas máquinas, provocando winerror 10013). Configurable con SOLARY_PORT.
-    port = int(os.getenv("SOLARY_PORT", "8080"))
+    host = os.getenv("SOLARI_HOST", "127.0.0.1")
+    # Puerto 9000 por defecto (8001 y 8080 caen en el rango excluido por Windows/Hyper-V
+    # en algunas máquinas, provocando winerror 10013). Configurable con SOLARI_PORT.
+    port = int(os.getenv("SOLARI_PORT", "9000"))
     config = uvicorn.Config(
         "app.main:app",
         host=host,

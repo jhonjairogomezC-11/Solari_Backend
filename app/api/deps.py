@@ -76,6 +76,42 @@ def require_roles(*roles: str):
     return _checker
 
 
+async def get_usuario_opcional(
+    db: DbDep,
+    settings: SettingsDep,
+    creds: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)],
+) -> Usuario | None:
+    """Usuario autenticado si envía un token válido; None si no (sin error).
+
+    Sirve para endpoints públicos que se personalizan cuando hay sesión.
+    """
+    if creds is None or not creds.credentials:
+        return None
+    try:
+        payload = decode_access_token(settings, creds.credentials)
+    except jwt.PyJWTError:
+        return None
+    sub = payload.get("sub")
+    if not sub:
+        return None
+    usuario = await UsuarioRepository(db).por_id(sub)
+    if usuario is None or usuario.estado != ESTADO_ACTIVO:
+        return None
+    return usuario
+
+
+OptionalUser = Annotated[Usuario | None, Depends(get_usuario_opcional)]
+
+
+async def get_voluntario_opcional(db: DbDep, user: OptionalUser):
+    """Perfil de voluntario del usuario si es voluntario con perfil; None en otro caso."""
+    from app.models.usuario import ROL_VOLUNTARIO
+
+    if user is None or user.rol != ROL_VOLUNTARIO:
+        return None
+    return await UsuarioRepository(db).voluntario_por_usuario(user.id)
+
+
 async def get_fundacion_actual(db: DbDep, user: CurrentUser):
     """Devuelve el perfil de Fundación del usuario autenticado (rol FUNDACION)."""
     from app.models.usuario import ROL_FUNDACION
