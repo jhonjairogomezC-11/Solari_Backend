@@ -145,13 +145,20 @@ class PerfilService:
             )
             self.db.add(perfil)
         else:
-            if data.nit and data.nit != existente.nit and await self.repo.existe_nit(data.nit):
-                raise ConflictError("Ese NIT ya está registrado.")
-            existente.nombre = data.nombre_fundacion
-            existente.nit = data.nit
-            existente.tipo_organizacion = data.tipo_organizacion
-            existente.constituida_legalmente = data.constituida_legalmente
-            existente.representante_legal = data.representante_legal
+            # Datos legales/de identidad INMUTABLES desde el perfil.
+            if (
+                data.nombre_fundacion != existente.nombre
+                or (data.nit or None) != (existente.nit or None)
+                or data.tipo_organizacion != existente.tipo_organizacion
+                or data.constituida_legalmente != existente.constituida_legalmente
+                or data.representante_legal != existente.representante_legal
+                or (data.documento_legal or None) != (existente.documento_legal or None)
+            ):
+                raise ForbiddenError(
+                    "El nombre, tipo de organización, NIT, representante legal y documento "
+                    "legal no se pueden modificar desde el perfil. Solicita una corrección "
+                    "al equipo de soporte."
+                )
             existente.correo_institucional = data.correo_institucional
             existente.telefono = data.telefono_contacto
             existente.direccion = data.direccion

@@ -35,7 +35,17 @@ def user_agent(request: Request) -> str | None:
     return request.headers.get("user-agent")
 
 
+# Rutas que un usuario con el correo SIN verificar sí puede usar (confirmar, reenviar, salir).
+_RUTAS_SIN_VERIFICAR = (
+    "/auth/me",
+    "/auth/resend-verification",
+    "/auth/logout",
+    "/auth/revoke-refresh",
+)
+
+
 async def get_current_user(
+    request: Request,
     db: DbDep,
     settings: SettingsDep,
     creds: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)],
@@ -59,6 +69,13 @@ async def get_current_user(
         raise AuthError("Token inválido.")
     if usuario.estado != ESTADO_ACTIVO:
         raise ForbiddenError("Tu cuenta no está activa.")
+    # Hasta confirmar el correo solo se permiten las rutas de verificación (admins exentos).
+    if (
+        not usuario.email_verificado
+        and usuario.rol != "ADMIN"
+        and not request.url.path.endswith(_RUTAS_SIN_VERIFICAR)
+    ):
+        raise ForbiddenError("Confirma tu correo electrónico para continuar.")
     return usuario
 
 
@@ -110,6 +127,15 @@ async def get_voluntario_opcional(db: DbDep, user: OptionalUser):
     if user is None or user.rol != ROL_VOLUNTARIO:
         return None
     return await UsuarioRepository(db).voluntario_por_usuario(user.id)
+
+
+async def get_fundacion_opcional(db: DbDep, user: OptionalUser):
+    """Perfil de fundación del usuario si es fundación con perfil; None en otro caso."""
+    from app.models.usuario import ROL_FUNDACION
+
+    if user is None or user.rol != ROL_FUNDACION:
+        return None
+    return await UsuarioRepository(db).fundacion_por_usuario(user.id)
 
 
 async def get_fundacion_actual(db: DbDep, user: CurrentUser):

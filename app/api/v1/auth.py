@@ -205,6 +205,18 @@ async def verify_email(
     return MessageResponse(message="Email verificado correctamente.")
 
 
+@router.post("/resend-verification", response_model=MessageResponse)
+@limiter.limit("5/hour")
+async def resend_verification(
+    request: Request, user: CurrentUser, db: DbDep, settings: SettingsDep
+) -> MessageResponse:
+    """Reenvía el correo de verificación al usuario autenticado."""
+    if user.email_verificado:
+        return MessageResponse(message="Tu correo ya está verificado.")
+    await AuthService(db, settings).reenviar_verificacion(user)
+    return MessageResponse(message="Te enviamos un nuevo correo de verificación.")
+
+
 # ─────────────────────────── Recuperación de contraseña ───────────────────────────
 
 

@@ -53,6 +53,15 @@ from app.services.soporte_service import SoporteService
 from tests.integration.conftest import _usuario
 
 
+@pytest.fixture(autouse=True)
+def _actividades_terminadas(monkeypatch):
+    """Estas pruebas registran asistencia de actividades con fecha futura. La regla de
+    "solo cuando la actividad terminó" no es lo que se prueba aquí, así que se desactiva."""
+    monkeypatch.setattr(
+        "app.services.postulacion_service.actividad_terminada", lambda _pub: True
+    )
+
+
 async def _participar(db, f, pub, v, calificacion: int = 5) -> Postulacion:
     """Postula, acepta y confirma asistencia (participación verificada)."""
     svc = PostulacionService(db)

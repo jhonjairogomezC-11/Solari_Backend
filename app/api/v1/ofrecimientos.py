@@ -11,6 +11,7 @@ from app.api.deps import (
     CurrentUser,
     DbDep,
     get_fundacion_actual,
+    get_fundacion_opcional,
     get_voluntario_actual,
     get_voluntario_opcional,
 )
@@ -35,6 +36,7 @@ router = APIRouter(tags=["ofrecimientos"])
 VoluntarioDep = Annotated[Voluntario, Depends(get_voluntario_actual)]
 FundacionDep = Annotated[Fundacion, Depends(get_fundacion_actual)]
 VoluntarioOpt = Annotated[Voluntario | None, Depends(get_voluntario_opcional)]
+FundacionOpt = Annotated[Fundacion | None, Depends(get_fundacion_opcional)]
 
 
 @router.get("/ofrecimientos/categorias", response_model=CategoriasOfrecimiento)
@@ -49,6 +51,7 @@ async def explorar(
     db: DbDep,
     _: CurrentUser,
     voluntario: VoluntarioOpt,
+    fundacion: FundacionOpt,
     tipo: str | None = Query(default=None, pattern="^(OBJETO|SERVICIO)$"),
     categoria: str | None = Query(default=None, max_length=60),
     municipio_id: int | None = None,
@@ -59,6 +62,7 @@ async def explorar(
     return await OfrecimientoService(db).explorar(
         tipo=tipo, categoria=categoria, municipio_id=municipio_id, buscar=buscar,
         page=page, per_page=per_page, voluntario_id=voluntario.id if voluntario else None,
+        fundacion_id=fundacion.id if fundacion else None,
     )
 
 
@@ -68,9 +72,17 @@ async def mis_ofrecimientos(db: DbDep, voluntario: VoluntarioDep):
 
 
 @router.get("/ofrecimientos/{ofrecimiento_id}", response_model=OfrecimientoOut)
-async def detalle(db: DbDep, _: CurrentUser, voluntario: VoluntarioOpt, ofrecimiento_id: uuid.UUID):
+async def detalle(
+    db: DbDep,
+    _: CurrentUser,
+    voluntario: VoluntarioOpt,
+    fundacion: FundacionOpt,
+    ofrecimiento_id: uuid.UUID,
+):
     return await OfrecimientoService(db).detalle(
-        ofrecimiento_id, voluntario.id if voluntario else None
+        ofrecimiento_id,
+        voluntario.id if voluntario else None,
+        fundacion.id if fundacion else None,
     )
 
 

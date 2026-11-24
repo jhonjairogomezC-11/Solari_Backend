@@ -46,6 +46,39 @@ class VoluntarioPerfilInput(BaseModel):
     contacto_emergencia_nombre: str | None = Field(default=None, max_length=150)
     contacto_emergencia_telefono: str | None = Field(default=None, max_length=20)
 
+    @field_validator(
+        "direccion", "telefono_contacto", "contacto_emergencia_nombre",
+        "contacto_emergencia_telefono", mode="before",
+    )
+    @classmethod
+    def _texto_limpio(cls, v: object) -> object:
+        return v.strip() if isinstance(v, str) else v
+
+    @model_validator(mode="after")
+    def _datos_obligatorios(self) -> VoluntarioPerfilInput:
+        """Datos de contacto obligatorios del perfil de voluntario."""
+        faltan = [
+            etiqueta
+            for etiqueta, valor in (
+                ("la dirección de residencia", self.direccion),
+                ("el teléfono de contacto", self.telefono_contacto),
+                ("el nombre del contacto de emergencia", self.contacto_emergencia_nombre),
+                ("el teléfono del contacto de emergencia", self.contacto_emergencia_telefono),
+            )
+            if not valor
+        ]
+        if faltan:
+            raise ValueError(f"Indica {', '.join(faltan)}.")
+        for etiqueta, tel in (
+            ("teléfono de contacto", self.telefono_contacto),
+            ("teléfono de emergencia", self.contacto_emergencia_telefono),
+        ):
+            if not re.fullmatch(r"[0-9+\s-]{7,20}", tel or ""):
+                raise ValueError(f"El {etiqueta} no es válido (7 a 20 dígitos).")
+        if len(self.direccion or "") < 4:
+            raise ValueError("La dirección de residencia es demasiado corta.")
+        return self
+
     @field_validator("tipo_documento")
     @classmethod
     def _tipo(cls, v: str) -> str:

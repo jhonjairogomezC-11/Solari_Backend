@@ -7,11 +7,13 @@ import uuid
 import jwt
 from fastapi import APIRouter, Query, Request
 from fastapi.responses import StreamingResponse
+from sqlalchemy import select
 
 from app.api.deps import CurrentUser, DbDep, SettingsDep
 from app.core.exceptions import AuthError, NotFoundError
 from app.core.rate_limit import limiter
 from app.core.security import create_sse_ticket, decode_sse_ticket
+from app.models.postulacion import Postulacion
 from app.models.usuario import ESTADO_ACTIVO
 from app.repositories.usuario_repo import UsuarioRepository
 from app.schemas.notificacion import NotificacionOut
@@ -67,8 +69,27 @@ async def listar(
     per_page: int = Query(20, ge=1, le=100),
 ):
     filas, total = await NotificacionService(db).listar(user.id, page, per_page)
+    post_ids = {f.objeto_id for f in filas if f.objeto_tipo == "postulacion" and f.objeto_id}
+    pub_por_post: dict[uuid.UUID, uuid.UUID] = {}
+    if post_ids:
+        pub_por_post = {
+            pid: pub
+            for pid, pub in (
+                await db.execute(
+                    select(Postulacion.id, Postulacion.publicacion_id).where(
+                        Postulacion.id.in_(post_ids)
+                    )
+                )
+            ).all()
+        }
+    data = []
+    for f in filas:
+        out = NotificacionOut.model_validate(f)
+        if f.objeto_tipo == "postulacion" and f.objeto_id:
+            out.publicacion_id = pub_por_post.get(f.objeto_id)
+        data.append(out)
     return {
-        "data": [NotificacionOut.model_validate(f) for f in filas],
+        "data": data,
         "total": total,
         "page": page,
         "per_page": per_page,

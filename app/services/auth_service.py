@@ -316,6 +316,10 @@ class AuthService:
             ),
         )
 
+    async def reenviar_verificacion(self, usuario: Usuario) -> None:
+        await self._emitir_verificacion(usuario)
+        await self.db.commit()
+
     async def verificar_email(self, raw_token: str) -> bool:
         usuario_id = await self.tokens.consumir_token_verificacion(raw_token)
         if usuario_id is None:

@@ -112,11 +112,30 @@ class OfrecimientoService:
     # ─────────────── Serialización ───────────────
 
     async def _salida(
-        self, ofs: list[Ofrecimiento], *, voluntario_id: uuid.UUID | None = None
+        self,
+        ofs: list[Ofrecimiento],
+        *,
+        voluntario_id: uuid.UUID | None = None,
+        fundacion_id: uuid.UUID | None = None,
     ) -> list[OfrecimientoOut]:
         if not ofs:
             return []
         ids = [o.id for o in ofs]
+        solicitados: set[uuid.UUID] = set()
+        if fundacion_id is not None:
+            solicitados = set(
+                (
+                    await self.db.execute(
+                        select(SolicitudInteres.ofrecimiento_id).where(
+                            SolicitudInteres.ofrecimiento_id.in_(ids),
+                            SolicitudInteres.fundacion_id == fundacion_id,
+                            SolicitudInteres.estado.in_(SI_ACTIVAS),
+                        )
+                    )
+                )
+                .scalars()
+                .all()
+            )
         nombres = {
             vid: nombre
             for vid, nombre in (
@@ -168,6 +187,7 @@ class OfrecimientoService:
             out.voluntario_nombre = primer_nombre(nombres.get(o.voluntario_id, ""))
             out.habilidades = [HabilidadOut.model_validate(h) for h in habs.get(o.id, [])]
             out.es_mio = voluntario_id is not None and o.voluntario_id == voluntario_id
+            out.ya_solicitado = o.id in solicitados
             if out.es_mio:
                 out.solicitudes_pendientes = pendientes.get(o.id, 0)
             salida.append(out)
@@ -364,6 +384,7 @@ class OfrecimientoService:
         page: int,
         per_page: int,
         voluntario_id: uuid.UUID | None = None,
+        fundacion_id: uuid.UUID | None = None,
     ) -> OfrecimientoPage:
         condiciones = [
             Ofrecimiento.estado == OF_DISPONIBLE,
@@ -392,7 +413,7 @@ class OfrecimientoService:
         )
         ofs = list((await self.db.execute(stmt)).scalars().all())
         return OfrecimientoPage(
-            data=await self._salida(ofs, voluntario_id=voluntario_id),
+            data=await self._salida(ofs, voluntario_id=voluntario_id, fundacion_id=fundacion_id),
             total=total,
             page=page,
             per_page=per_page,
@@ -400,7 +421,10 @@ class OfrecimientoService:
         )
 
     async def detalle(
-        self, ofrecimiento_id: uuid.UUID, voluntario_id: uuid.UUID | None
+        self,
+        ofrecimiento_id: uuid.UUID,
+        voluntario_id: uuid.UUID | None,
+        fundacion_id: uuid.UUID | None = None,
     ) -> OfrecimientoOut:
         of = await self.db.get(Ofrecimiento, ofrecimiento_id)
         if of is None:
@@ -408,7 +432,9 @@ class OfrecimientoService:
         es_dueno = voluntario_id is not None and of.voluntario_id == voluntario_id
         if not es_dueno and of.estado in (OF_PAUSADO, OF_FINALIZADO):
             raise NotFoundError("Publicación no encontrada.")
-        return (await self._salida([of], voluntario_id=voluntario_id))[0]
+        return (
+            await self._salida([of], voluntario_id=voluntario_id, fundacion_id=fundacion_id)
+        )[0]
 
     # ─────────────── Solicitudes de interés ───────────────
 

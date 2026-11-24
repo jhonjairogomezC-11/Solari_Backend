@@ -14,6 +14,8 @@ class NotificacionOut(BaseModel):
     mensaje: str
     objeto_tipo: str | None = None
     objeto_id: uuid.UUID | None = None
+    # Para objeto_tipo "postulacion": publicación asociada (permite abrir el chat de la fundación).
+    publicacion_id: uuid.UUID | None = None
     leida: bool
     fecha_lectura: datetime | None = None
     fecha_creacion: datetime

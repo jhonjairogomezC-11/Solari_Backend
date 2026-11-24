@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import math
 import uuid
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, time, timedelta, timezone
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -45,7 +45,12 @@ from app.models.postulacion import (
     Postulacion,
     PostulacionHistorial,
 )
-from app.models.publicacion import ESTADO_PUBLICADA, publicacion_habilidades
+from app.models.publicacion import (
+    ESTADO_COMPLETADA,
+    ESTADO_FINALIZADA,
+    ESTADO_PUBLICADA,
+    publicacion_habilidades,
+)
 from app.models.usuario import Usuario
 from app.models.voluntario import Voluntario
 from app.repositories.postulacion_repo import PostulacionRepository
@@ -77,6 +82,24 @@ RESPONDIBLES = (ESTADO_PENDIENTE, ESTADO_EN_REVISION, ESTADO_LISTA_ESPERA)
 
 def _now() -> datetime:
     return datetime.now(UTC)
+
+
+_TZ_BOGOTA = timezone(timedelta(hours=-5), "America/Bogota")
+
+
+def actividad_terminada(pub) -> bool:
+    """True si la actividad ya terminó (hora de Bogotá).
+
+    Termina en `fecha_fin` a la `hora_fin`; si no hay hora de fin, al acabar ese día.
+    """
+    if pub.estado in (ESTADO_FINALIZADA, ESTADO_COMPLETADA):
+        return True
+    ahora = datetime.now(_TZ_BOGOTA)
+    if pub.hora_fin is not None:
+        fin = datetime.combine(pub.fecha_fin, pub.hora_fin, tzinfo=_TZ_BOGOTA)
+    else:
+        fin = datetime.combine(pub.fecha_fin, time(23, 59, 59), tzinfo=_TZ_BOGOTA)
+    return ahora >= fin
 
 
 def _edad(nacimiento: date) -> int:
@@ -354,6 +377,11 @@ class PostulacionService:
         post = await self._post_de_fundacion(postulacion_id, fundacion.id)
         if post.estado != ESTADO_ACEPTADO:
             raise ConflictError("Solo puedes confirmar asistencia de postulaciones aceptadas.")
+        pub_actividad = await self.pub_repo.por_id(post.publicacion_id)
+        if pub_actividad is not None and not actividad_terminada(pub_actividad):
+            raise ConflictError(
+                "Solo puedes registrar la asistencia y calificar cuando la actividad haya terminado."
+            )
 
         anterior = post.estado
         if data.asistio:

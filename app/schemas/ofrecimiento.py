@@ -126,6 +126,8 @@ class OfrecimientoOut(BaseModel):
     habilidades: list[HabilidadOut] = []
     es_mio: bool = False
     solicitudes_pendientes: int | None = None
+    # True si la fundación autenticada ya tiene una solicitud en curso.
+    ya_solicitado: bool = False
 
 
 class OfrecimientoPage(BaseModel):
