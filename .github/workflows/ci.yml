@@ -38,10 +38,13 @@ jobs:
       - name: Ruff
         run: uv run ruff check app tests --extend-ignore E501,I001,C416,C408,S608,S311
 
-      # tests/integration y tests/test_auth_flow.py necesitan PostgreSQL
+      # tests/integration, test_auth_flow.py, test_aceptacion_legal.py y test_onboarding_api.py
+      # necesitan PostgreSQL
       # (fixtures db_engine/client de tests/conftest.py), así que se excluyen.
       - name: Pruebas unitarias (sin base de datos)
         run: >-
           uv run pytest -q
           --ignore=tests/integration
           --ignore=tests/test_auth_flow.py
+          --ignore=tests/test_aceptacion_legal.py
+          --ignore=tests/test_onboarding_api.py

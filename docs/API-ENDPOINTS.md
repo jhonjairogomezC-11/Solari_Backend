@@ -1,9 +1,33 @@
-# Contrato de endpoints — Fase 1 (Autenticación)
+# Contrato de endpoints — Autenticación y documentos legales
 
 Base: `/api/v1`. Respuestas de error con formato `{ "message": "..." }` y, en
 validación, `{ "message": "...", "errors": { "campo": ["..."] } }`.
 
-La documentación interactiva (OpenAPI) está en `/docs`.
+Este documento cubre **solo autenticación y legal**. La lista completa de endpoints
+(convocatorias, postulaciones, perfil, notificaciones, objetos y servicios, admin…) está en
+la documentación interactiva (OpenAPI) en `http://localhost:9000/docs`.
+
+## Correo sin confirmar
+
+Mientras el usuario no confirme su correo (`email_verificado = false`), todos los
+endpoints que requieren sesión responden **403** `"Confirma tu correo electrónico para
+continuar."`, excepto `GET /auth/me`, `POST /auth/resend-verification`,
+`POST /auth/logout` y `POST /auth/revoke-refresh`. Los administradores están exentos.
+
+## Aceptación de documentos legales
+
+Si hay documentos legales publicados como requeridos (`GET /legal/documentos`,
+`requerido_registro = true`), los registros deben incluir:
+
+```json
+"aceptaciones": [
+  { "codigo": "TERMINOS_CONDICIONES", "aceptado": true },
+  { "codigo": "POLITICA_DATOS_PERSONALES", "aceptado": true }
+]
+```
+
+Si falta alguno, el registro responde **409**. El backend resuelve la versión vigente y
+guarda la fecha, la IP y el navegador; el cliente no envía versión ni fecha.
 
 ## Compatibilidad con la app móvil
 
@@ -68,8 +92,15 @@ contrato que la app Flutter ya consume:
 - Errores: 401 (sin token/ inválido/ expirado), 403 (cuenta no activa).
 
 ## GET /auth/verify-email/{token}
-- Marca el email como verificado si el token es válido y no usado.
+- Marca el email como verificado si el token es válido y no usado (vigencia: 24 horas).
+- El enlace del correo apunta al frontend: `FRONTEND_VERIFY_URL?token=<token>`; el
+  frontend llama a este endpoint.
 - Respuesta: 200 o 400 (token inválido/expirado).
+
+## POST /auth/resend-verification  (requiere Bearer)
+- Genera un enlace de verificación nuevo y lo envía al correo del usuario.
+- Si el correo ya está verificado, responde 200 sin enviar nada.
+- Respuesta: 200 `{ message }`. Rate limit: 5/hora.
 
 ## POST /auth/forgot-password
 - Entrada: `{ email }`.

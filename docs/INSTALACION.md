@@ -75,9 +75,19 @@ psycopg async):
 uv run python run.py
 ```
 
-- API: `http://127.0.0.1:8001/api/v1`
-- OpenAPI (Swagger): `http://127.0.0.1:8001/docs`
-- Salud: `http://127.0.0.1:8001/api/v1/health`
+- API: `http://127.0.0.1:9000/api/v1`
+- OpenAPI (Swagger): `http://127.0.0.1:9000/docs`
+- Salud: `http://127.0.0.1:9000/api/v1/health`
+- El puerto se cambia con `SOLARI_PORT` (8001 y 8080 suelen estar reservados por Hyper-V).
+- `run.py` no recarga solo: tras cambiar código del backend, detenlo (Ctrl+C) y vuelve a
+  ejecutarlo.
+
+Después de la primera instalación, publica los documentos legales (sin ellos el registro
+no pide aceptación):
+
+```powershell
+uv run python scripts/seed_documentos_legales.py
+```
 
 > Nota: no uses `uvicorn --reload` directamente en Windows con psycopg async; el
 > reload crea un loop ProactorEventLoop incompatible. `run.py` resuelve esto.
