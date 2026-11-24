@@ -79,12 +79,18 @@ renombra tablas o columnas) y JWT compatibles, así que ambos podrían convivir.
 | Gamificación | XP, 8 niveles, 11 logros, ranking top 1000 | XP **solo** al confirmar asistencia: 50 + 5 por hora reconocida. Idempotente; cada logro se gana una vez |
 | Favoritos | Convocatorias y organizaciones | Persisten en BD, sin duplicados |
 | Notificaciones | Avisos internos por eventos reales | El usuario configura preferencias por tipo; no se envían por correo |
-| Actividades recurrentes | Programación por días, semanas o meses | Máximo 3 convocatorias por ciclo; luego se pausa hasta que la organización autorice. Aún no copian las fotos de la galería |
+| Actividades recurrentes | Programación por días, semanas o meses | Máximo 3 convocatorias por ciclo; luego se pausa hasta que la organización autorice. Las fotos de la programación (hasta 8) se copian a cada convocatoria generada |
 | Objetos y servicios | El voluntario publica objetos (con cantidad) o servicios (con habilidades); la organización pulsa "Me interesa" y coordinan por mensajes | Siempre gratuitos (sin precios); los mensajes bloquean correos, teléfonos y enlaces; la entrega se completa solo si **ambas partes** confirman; control de cantidades con bloqueo de fila |
 | Perfil público y verificación | Historia, misión, áreas de impacto, galería, contacto visible a elección, estadísticas reales; documentos privados para verificación | Documentos en carpeta privada (solo dueño y admin). La insignia la otorga un administrador y se muestra con aviso de que no es garantía absoluta |
 | Reseñas | El voluntario reseña a la organización | Solo con participación confirmada; la organización responde; el admin puede ocultar con motivo |
 | Soporte y privacidad | Tickets con hilo de mensajes; solicitudes de cuenta (bloqueo, eliminación, datos…) | Las solicitudes de privacidad no se ejecutan solas: requieren orden explícita del admin |
 | Trayectoria | Actividades, horas, organizaciones y XP del voluntario | Calculada con registros reales |
+| Edad mínima y menores | Registro solo desde los **16 años**; de 16 a 17 el acudiente descarga el formato, lo firma y se sube | Regla única en `app/core/edad.py` (`EDAD_MINIMA = 16`, `MAYORIA_EDAD = 18`), validada en registro, perfil y frontend. Un menor de 16–17 puede postularse, pero la organización no puede aceptarlo hasta que un administrador apruebe la autorización. Una convocatoria no puede pedir edad mínima menor de 16 |
+| Certificados | PDF descargable cuando la asistencia está confirmada y la convocatoria otorga certificado | Código de verificación HMAC (no se guarda); verificación pública en `/certificados/verificar` con nombre abreviado |
+| Calendario | Próximas actividades del voluntario y de la organización; exportación `.ics` | Recordatorio automático (notificación) antes de cada actividad aceptada |
+| Mensajes de postulación | Chat entre voluntario y organización dentro de una postulación | Mismo filtro de datos personales que objetos y servicios |
+| Notificaciones en vivo | Llegan al instante por SSE (`/notificaciones/stream`) | La conexión usa un ticket de corta duración, no el JWT en la URL; si falla, vuelve al sondeo |
+| Seguridad de la cuenta | Sesiones y dispositivos activos, cerrar sesiones, verificación en dos pasos (TOTP) | Alerta al iniciar sesión desde un dispositivo nuevo |
 
 ### Ciclo de una participación
 
@@ -120,7 +126,7 @@ app/
 ├── services/        # Reglas de negocio (una clase por módulo)
 ├── api/v1/          # Endpoints REST, uno por módulo
 └── email/           # Envío de correos
-alembic/versions/    # 0001 → 0004 (todas aditivas)
+alembic/versions/    # 0001 → 0007 (todas aditivas)
 scripts/             # Semillas de datos de ejemplo
 uploads/             # Archivos públicos (fotos, logos, galeria, ofrecimientos, convocatorias)
 private_uploads/     # Documentos privados (identidad, verificación)
@@ -199,7 +205,7 @@ uv run pytest
 ### Stack
 React 19 · Vite 8 · TypeScript 6 · Tailwind CSS v4 (tema "solar" claro/oscuro) ·
 React Router 7 · Axios (con refresh automático del token) · React Hook Form + Zod ·
-Framer Motion · lucide-react. TanStack Query está instalado pero aún no se usa.
+Framer Motion · lucide-react · Vitest + Testing Library (`npm test`).
 
 ### Estructura
 
@@ -287,11 +293,13 @@ público de la organización y el filtro de Explorar.
 
 ## 8. Pendientes conocidos
 
-- Las actividades recurrentes no copian la galería de fotos a las convocatorias que generan.
-- "Mis convocatorias" muestra filas sin foto; la portada solo se ve en Explorar y en el detalle.
-- Aún no se pueden agregar fotos a una convocatoria ya creada desde la pantalla (el endpoint existe).
-- TanStack Query está instalado pero sin uso.
-- `docs/SOLARI-SUSTENTACION.md` todavía menciona el puerto 8080 y 11 áreas de impacto; los valores actuales son 9000 y 32.
+- `docs/SOLARI-SUSTENTACION.md` todavía menciona el puerto 8080, 11 áreas de impacto y no
+  incluye los módulos nuevos (certificados, calendario, mensajes, seguridad, menores).
+- Docker no arranca con `Proyecto/voluntapp_mvp.sql` solo; hace falta un `pg_dump` de la base
+  local (ver sección 9).
+- Las pruebas de integración del backend (`tests/integration`, `test_auth_flow.py`) necesitan
+  PostgreSQL y no corren en CI.
+- Las carpetas siguen llamándose `Solary backend` y `Solary frontend`, igual que los repos de GitHub.
 
 ---
 

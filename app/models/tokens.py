@@ -36,6 +36,9 @@ class RefreshToken(Base):
     ip_solicitud: Mapped[str | None] = mapped_column(String(50), nullable=True)
     user_agent: Mapped[str | None] = mapped_column(Text, nullable=True)
     fecha_creacion: Mapped[datetime] = mapped_column(server_default=text("CURRENT_TIMESTAMP"))
+    # Migración 0006 (sesiones activas). Nullable: Laravel no las escribe.
+    fecha_ultimo_uso: Mapped[datetime | None] = mapped_column(nullable=True)
+    fecha_inicio_sesion: Mapped[datetime | None] = mapped_column(nullable=True)
 
 
 class RecuperacionPassword(Base):

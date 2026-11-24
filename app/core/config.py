@@ -74,6 +74,10 @@ class Settings(BaseSettings):
     upload_max_mb: int = 5
     upload_public_base: str = "http://localhost:9000/uploads"
 
+    # Recordatorios de actividad (tarea de fondo cada hora). Se desactiva también
+    # cuando APP_ENV es "testing" o "ci".
+    reminders_enabled: bool = True
+
     @field_validator("jwt_secret")
     @classmethod
     def _non_empty_secret(cls, v: str) -> str:

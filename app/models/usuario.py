@@ -9,8 +9,8 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, String, Text, text
-from sqlalchemy.dialects.postgresql import ENUM, UUID
+from sqlalchemy import BigInteger, Boolean, String, Text, text
+from sqlalchemy.dialects.postgresql import ENUM, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -55,6 +55,14 @@ class Usuario(Base):
     email_verificado: Mapped[bool] = mapped_column(Boolean, default=False)
     fecha_registro: Mapped[datetime] = mapped_column(server_default=text("CURRENT_TIMESTAMP"))
     fecha_actualizacion: Mapped[datetime] = mapped_column(server_default=text("CURRENT_TIMESTAMP"))
+    # Verificación en dos pasos (migración 0006). El secreto se guarda cifrado
+    # (Fernet) y NUNCA se expone en esquemas de salida.
+    mfa_secret: Mapped[str | None] = mapped_column(Text, nullable=True)
+    mfa_activo: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=text("false")
+    )
+    mfa_codigos_respaldo: Mapped[list[str] | None] = mapped_column(JSONB, nullable=True)
+    mfa_ultimo_paso: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
 
     @property
     def is_active(self) -> bool:

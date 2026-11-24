@@ -128,6 +128,10 @@ class VoluntarioPostulante(BaseModel):
     habilidades: list[str] = []
     habilidades_coinciden: list[str] = []
     coincidencia: int = 0
+    # Solo indica si es menor (sin fecha de nacimiento) y el estado de la autorización
+    # del acudiente: PENDIENTE | APROBADA | RECHAZADA | None (sin enviar o mayor de edad).
+    menor_de_edad: bool = False
+    autorizacion_estado: str | None = None
 
 
 class PostulanteOut(PostulacionOut):

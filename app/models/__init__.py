@@ -25,6 +25,7 @@ from app.models.legal import (
     DocumentoLegalVersion,
     UsuarioAceptacionLegal,
 )
+from app.models.mensaje_postulacion import MensajePostulacion
 from app.models.notificacion import Notificacion
 from app.models.postulacion import Postulacion, PostulacionHistorial
 from app.models.publicacion import Publicacion
@@ -87,4 +88,5 @@ __all__ = [
     "ResenaOrganizacion",
     "ProgramacionRecurrente",
     "PostulacionHistorial",
+    "MensajePostulacion",
 ]

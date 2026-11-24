@@ -25,6 +25,7 @@ from app.api.v1 import admin as admin_router
 from app.api.v1 import admin_gestion as admin_gestion_router
 from app.api.v1 import archivos as archivos_router
 from app.api.v1 import auth as auth_router
+from app.api.v1 import calendario as calendario_router
 from app.api.v1 import catalogos as catalogos_router
 from app.api.v1 import certificados as certificados_router
 from app.api.v1 import cuenta as cuenta_router
@@ -33,6 +34,8 @@ from app.api.v1 import gamificacion as gamificacion_router
 from app.api.v1 import habilidades as habilidades_router
 from app.api.v1 import health as health_router
 from app.api.v1 import legal as legal_router
+from app.api.v1 import menores as menores_router
+from app.api.v1 import mensajes_postulacion as mensajes_postulacion_router
 from app.api.v1 import notificaciones as notificaciones_router
 from app.api.v1 import ofrecimientos as ofrecimientos_router
 from app.api.v1 import organizaciones as organizaciones_router
@@ -40,8 +43,10 @@ from app.api.v1 import perfil as perfil_router
 from app.api.v1 import postulaciones as postulaciones_router
 from app.api.v1 import programaciones as programaciones_router
 from app.api.v1 import publicaciones as publicaciones_router
+from app.api.v1 import seguridad as seguridad_router
 from app.api.v1 import soporte as soporte_router
 from app.core.config import get_settings
+from app.core.tareas import lifespan_tareas
 from app.core.exceptions import register_exception_handlers
 from app.core.rate_limit import limiter
 from app.services.storage_service import CARPETAS_PUBLICAS
@@ -70,6 +75,7 @@ def create_app() -> FastAPI:
         description="Backend de autenticación de Solari (migración a Python).",
         docs_url="/docs",
         openapi_url="/openapi.json",
+        lifespan=lifespan_tareas,
     )
 
     # Rate limiting
@@ -90,7 +96,7 @@ def create_app() -> FastAPI:
             allow_origins=settings.cors_origins_list,
             allow_credentials=True,
             allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-            allow_headers=["Authorization", "Content-Type", "Accept"],
+            allow_headers=["Authorization", "Content-Type", "Accept", "X-Refresh-Token"],
         )
 
     register_exception_handlers(app)
@@ -108,14 +114,18 @@ def create_app() -> FastAPI:
     app.include_router(auth_router.router, prefix=prefix)
     app.include_router(legal_router.router, prefix=prefix)
     app.include_router(catalogos_router.router, prefix=prefix)
+    app.include_router(calendario_router.router, prefix=prefix)
     app.include_router(publicaciones_router.router, prefix=prefix)
     app.include_router(postulaciones_router.router, prefix=prefix)
     app.include_router(certificados_router.router, prefix=prefix)
     app.include_router(notificaciones_router.router, prefix=prefix)
+    app.include_router(mensajes_postulacion_router.router, prefix=prefix)
     app.include_router(perfil_router.router, prefix=prefix)
+    app.include_router(menores_router.router, prefix=prefix)
     app.include_router(favoritos_router.router, prefix=prefix)
     app.include_router(gamificacion_router.router, prefix=prefix)
     app.include_router(soporte_router.router, prefix=prefix)
+    app.include_router(seguridad_router.router, prefix=prefix)
     app.include_router(cuenta_router.router, prefix=prefix)
     app.include_router(habilidades_router.router, prefix=prefix)
     app.include_router(programaciones_router.router, prefix=prefix)

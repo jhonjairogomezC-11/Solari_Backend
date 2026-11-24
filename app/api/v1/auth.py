@@ -32,6 +32,7 @@ from app.schemas.auth import (
     TokenResponse,
     UsuarioOut,
 )
+from app.schemas.seguridad import LoginMfaRequest, MfaRequeridoResponse
 from app.services.auth_service import AuthService
 from app.services.google_service import GoogleAuthService
 
@@ -125,17 +126,33 @@ async def register_legacy(
 # ─────────────────────────── Login / sesión ───────────────────────────
 
 
-@router.post("/login", response_model=TokenResponse)
+@router.post("/login", response_model=TokenResponse | MfaRequeridoResponse)
 @limiter.limit("5/minute")
 async def login(
     request: Request,
     data: LoginRequest,
     db: DbDep,
     settings: SettingsDep,
-) -> TokenResponse:
+) -> TokenResponse | MfaRequeridoResponse:
+    """Sin MFA: respuesta de tokens habitual. Con MFA: {mfa_requerido, mfa_token}."""
     service = AuthService(db, settings)
     return await service.login(
         data.email, data.password, ip=_ip(request), user_agent=_ua(request)
+    )
+
+
+@router.post("/login/mfa", response_model=TokenResponse)
+@limiter.limit("5/minute")
+async def login_mfa(
+    request: Request,
+    data: LoginMfaRequest,
+    db: DbDep,
+    settings: SettingsDep,
+) -> TokenResponse:
+    """Segundo paso: código TOTP (6 dígitos) o código de respaldo de un solo uso."""
+    service = AuthService(db, settings)
+    return await service.login_mfa(
+        data.mfa_token, data.codigo, ip=_ip(request), user_agent=_ua(request)
     )
 
 
@@ -225,14 +242,14 @@ async def reset_password(
 # ─────────────────────────── Google OIDC ───────────────────────────
 
 
-@router.post("/google", response_model=TokenResponse)
+@router.post("/google", response_model=TokenResponse | MfaRequeridoResponse)
 @limiter.limit("10/minute")
 async def google_login(
     request: Request,
     data: GoogleLoginRequest,
     db: DbDep,
     settings: SettingsDep,
-) -> TokenResponse:
+) -> TokenResponse | MfaRequeridoResponse:
     service = GoogleAuthService(db, settings)
     return await service.login_con_google(
         data.id_token, rol=data.rol, ip=_ip(request), user_agent=_ua(request)

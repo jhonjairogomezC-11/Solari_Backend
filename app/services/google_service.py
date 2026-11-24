@@ -32,6 +32,7 @@ from app.models.usuario import (
 )
 from app.repositories.usuario_repo import UsuarioRepository
 from app.schemas.auth import TokenResponse
+from app.schemas.seguridad import MfaRequeridoResponse
 from app.services.auth_service import AuthService
 
 logger = logging.getLogger("solari.google")
@@ -71,7 +72,7 @@ class GoogleAuthService:
         rol: str | None,
         ip: str | None,
         user_agent: str | None,
-    ) -> TokenResponse:
+    ) -> TokenResponse | MfaRequeridoResponse:
         if not self.settings.google_audiences_list:
             raise AppError(
                 "El inicio de sesión con Google no está configurado.", status_code=503
@@ -130,20 +131,16 @@ class GoogleAuthService:
         if usuario.estado != ESTADO_ACTIVO:
             raise AuthError("Tu cuenta no está activa.")
 
-        access, expires_in = _crear_access(self.auth, usuario)
-        refresh = await self.auth.tokens.emitir_refresh_token(
-            usuario.id, ip=ip, user_agent=user_agent
+        if usuario.mfa_activo:
+            # Mismo segundo paso que el login con contraseña.
+            await self.db.commit()
+            return self.auth.respuesta_mfa_requerido(usuario)
+
+        sesion = await self.auth.iniciar_sesion_interactiva(
+            usuario, ip=ip, user_agent=user_agent
         )
         await self.db.commit()
-
-        from app.schemas.auth import UsuarioOut
-
-        return TokenResponse(
-            usuario=UsuarioOut.model_validate(usuario),
-            token=access,
-            refresh_token=refresh,
-            expires_in=expires_in,
-        )
+        return sesion
 
 
 def _crear_access(auth: AuthService, usuario: Usuario) -> tuple[str, int]:

@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import date, datetime
 
-from sqlalchemy import Boolean, Date, ForeignKey, Integer, String, Text, text
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, String, Text, text
 from sqlalchemy.dialects.postgresql import ENUM, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -51,6 +51,18 @@ class Voluntario(Base):
     preferencia_modalidad: Mapped[str | None] = mapped_column(String(20), nullable=True)
     contacto_emergencia_nombre: Mapped[str | None] = mapped_column(String(150), nullable=True)
     contacto_emergencia_telefono: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    # ── Autorización del acudiente para menores de edad (aditivos, nullable) ──
+    acudiente_nombre: Mapped[str | None] = mapped_column(String(150), nullable=True)
+    acudiente_documento: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    acudiente_telefono: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    acudiente_parentesco: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    autorizacion_acudiente: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    # NO_REQUERIDA | PENDIENTE | APROBADA | RECHAZADA; NULL = aún no enviada.
+    autorizacion_estado: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    autorizacion_fecha: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    autorizacion_nota: Mapped[str | None] = mapped_column(Text, nullable=True)
     # ── Estadísticas de trayectoria (aditivas, con default) ──
     # Los puntos (XP) viven en `voluntario_puntos`; aquí solo cacheamos horas y
     # actividades completadas para lecturas rápidas de perfil/ranking.

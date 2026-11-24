@@ -6,12 +6,15 @@ import calendar
 import uuid
 from datetime import UTC, date, datetime, timedelta
 
+from fastapi import UploadFile
 from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
 from app.core.exceptions import AppError, ConflictError, NotFoundError
 from app.models.fundacion import Fundacion
+from app.models.gamificacion import PublicacionImagen
 from app.models.habilidades import MAX_HABILIDADES, MIN_HABILIDADES
 from app.models.notificacion import TIPO_PROGRAMACION_PAUSADA
 from app.models.programacion import (
@@ -23,7 +26,12 @@ from app.models.programacion import (
     UNIDAD_SEMANAS,
     ProgramacionRecurrente,
 )
-from app.models.publicacion import ESTADO_PUBLICADA, Publicacion
+from app.models.publicacion import (
+    ESTADO_BORRADOR,
+    ESTADO_PENDIENTE_APROBACION,
+    ESTADO_PUBLICADA,
+    Publicacion,
+)
 from app.repositories.publicacion_repo import PublicacionRepository
 from app.schemas.programacion import (
     ConvocatoriaGenerada,
@@ -33,16 +41,38 @@ from app.schemas.programacion import (
 from app.schemas.publicacion import PublicacionCreate
 from app.services.habilidad_service import HabilidadService
 from app.services.notificacion_service import NotificacionService
+from app.services.storage_service import StorageService
 
-# Campos que calcula la programación; no se aceptan en la plantilla.
+# Convocatorias generadas a las que todavía se les propagan cambios de fotos.
+_ESTADOS_EDITABLES = (ESTADO_BORRADOR, ESTADO_PENDIENTE_APROBACION, ESTADO_PUBLICADA)
+
+# Las fotos de la programación se guardan en la plantilla JSON bajo esta clave
+# (URLs generadas por el servidor) y se copian a cada convocatoria generada.
+CLAVE_IMAGENES = "imagenes"
+MAX_IMAGENES = 8
+
+# Campos que calcula la programación; no se aceptan en la plantilla. Las fotos
+# tampoco: solo se agregan por el endpoint de subida.
 _CAMPOS_CALCULADOS = (
     "fecha_inicio", "fecha_fin", "hora_inicio", "hora_fin",
-    "cupo_maximo", "fecha_limite_postulacion",
+    "cupo_maximo", "fecha_limite_postulacion", CLAVE_IMAGENES,
 )
 
 
 def _now() -> datetime:
     return datetime.now(UTC)
+
+
+def imagenes_de_plantilla(plantilla: dict | None) -> list[str]:
+    """URLs de las fotos guardadas en la plantilla (ignora valores no válidos)."""
+    valor = (plantilla or {}).get(CLAVE_IMAGENES)
+    if not isinstance(valor, list):
+        return []
+    return [v for v in valor if isinstance(v, str) and v]
+
+
+def plantilla_sin_imagenes(plantilla: dict | None) -> dict:
+    return {k: v for k, v in (plantilla or {}).items() if k != CLAVE_IMAGENES}
 
 
 def sumar_meses(d: date, meses: int) -> date:
@@ -74,7 +104,7 @@ class ProgramacionService:
         fin = inicio + timedelta(days=prog.duracion_dias - 1)
         try:
             return PublicacionCreate(
-                **prog.plantilla,
+                **plantilla_sin_imagenes(prog.plantilla),
                 fecha_inicio=inicio,
                 fecha_fin=fin,
                 hora_inicio=prog.hora_inicio,
@@ -99,7 +129,8 @@ class ProgramacionService:
                 fecha_publicacion=_now(),
                 programacion_id=prog.id,
             )
-            await self.pub_repo.crear(payload, data.habilidades)
+            pub = await self.pub_repo.crear(payload, data.habilidades)
+            self._copiar_imagenes(pub, imagenes_de_plantilla(prog.plantilla))
             ultima = inicio
             prog.proxima_fecha = siguiente_fecha(inicio, prog.unidad_intervalo, prog.intervalo)
 
@@ -198,6 +229,109 @@ class ProgramacionService:
         await self.db.commit()
         return salida
 
+    # ─────────────── Fotos de la programación ───────────────
+
+    def _copiar_imagenes(self, pub: Publicacion, urls: list[str]) -> None:
+        """Copia las fotos a una convocatoria recién generada (la primera es portada)."""
+        for orden, url in enumerate(urls[:MAX_IMAGENES]):
+            self.db.add(PublicacionImagen(publicacion_id=pub.id, ruta=url, orden=orden))
+        if urls:
+            pub.imagen = urls[0]
+
+    async def _generadas_vigentes(self, prog: ProgramacionRecurrente) -> list[Publicacion]:
+        """Convocatorias ya generadas que aún no empiezan y siguen activas."""
+        return list(
+            (
+                await self.db.execute(
+                    select(Publicacion).where(
+                        Publicacion.programacion_id == prog.id,
+                        Publicacion.fecha_inicio >= date.today(),
+                        Publicacion.estado.in_(_ESTADOS_EDITABLES),
+                    )
+                )
+            ).scalars().all()
+        )
+
+    async def _galerias(self, pub_ids: list[uuid.UUID]) -> dict[uuid.UUID, list[PublicacionImagen]]:
+        galerias: dict[uuid.UUID, list[PublicacionImagen]] = {i: [] for i in pub_ids}
+        if not pub_ids:
+            return galerias
+        for img in (
+            await self.db.execute(
+                select(PublicacionImagen)
+                .where(PublicacionImagen.publicacion_id.in_(pub_ids))
+                .order_by(PublicacionImagen.orden, PublicacionImagen.fecha_creacion)
+            )
+        ).scalars().all():
+            galerias[img.publicacion_id].append(img)
+        return galerias
+
+    async def subir_imagen(
+        self, programacion_id: uuid.UUID, fundacion: Fundacion, archivo: UploadFile
+    ) -> ProgramacionOut:
+        """Agrega una foto a la programación y a sus convocatorias vigentes ya generadas."""
+        prog = await self._de_fundacion(programacion_id, fundacion.id)
+        if prog.estado == PROG_TERMINADA:
+            raise ConflictError("La programación ya terminó.")
+        actuales = imagenes_de_plantilla(prog.plantilla)
+        if len(actuales) >= MAX_IMAGENES:
+            raise ConflictError(f"Máximo {MAX_IMAGENES} fotografías por actividad recurrente.")
+        url = await StorageService(get_settings()).guardar_imagen(archivo, "convocatorias")
+        # Se asigna un dict nuevo para que SQLAlchemy detecte el cambio en el JSONB.
+        prog.plantilla = {**(prog.plantilla or {}), CLAVE_IMAGENES: [*actuales, url]}
+        prog.fecha_actualizacion = _now()
+
+        pubs = await self._generadas_vigentes(prog)
+        galerias = await self._galerias([p.id for p in pubs])
+        for pub in pubs:
+            existentes = galerias[pub.id]
+            if len(existentes) >= MAX_IMAGENES or any(i.ruta == url for i in existentes):
+                continue
+            orden = max((i.orden for i in existentes), default=-1) + 1
+            self.db.add(PublicacionImagen(publicacion_id=pub.id, ruta=url, orden=orden))
+            if not existentes:
+                pub.imagen = url
+            pub.fecha_actualizacion = _now()
+        await self.db.flush()
+        salida = await self._salida(prog)
+        await self.db.commit()
+        return salida
+
+    async def eliminar_imagen(
+        self, programacion_id: uuid.UUID, fundacion: Fundacion, ruta: str
+    ) -> ProgramacionOut:
+        """Quita una foto de la programación y de sus convocatorias vigentes.
+
+        El archivo no se borra del disco: las convocatorias ya realizadas pueden
+        seguir mostrándolo en su galería.
+        """
+        prog = await self._de_fundacion(programacion_id, fundacion.id)
+        actuales = imagenes_de_plantilla(prog.plantilla)
+        if ruta not in actuales:
+            raise NotFoundError("Fotografía no encontrada.")
+        prog.plantilla = {
+            **(prog.plantilla or {}),
+            CLAVE_IMAGENES: [u for u in actuales if u != ruta],
+        }
+        prog.fecha_actualizacion = _now()
+
+        pubs = await self._generadas_vigentes(prog)
+        galerias = await self._galerias([p.id for p in pubs])
+        for pub in pubs:
+            restantes = []
+            for img in galerias[pub.id]:
+                if img.ruta == ruta:
+                    await self.db.delete(img)
+                else:
+                    restantes.append(img)
+            if len(restantes) != len(galerias[pub.id]):
+                pub.imagen = restantes[0].ruta if restantes else None
+                pub.fecha_actualizacion = _now()
+        await self.db.flush()
+        salida = await self._salida(prog)
+        await self.db.commit()
+        return salida
+
     async def listar(self, fundacion_id: uuid.UUID) -> list[ProgramacionOut]:
         stmt = (
             select(ProgramacionRecurrente)
@@ -216,5 +350,6 @@ class ProgramacionService:
             )
         ).scalars().all()
         out = ProgramacionOut.model_validate(prog)
+        out.imagenes = imagenes_de_plantilla(prog.plantilla)
         out.convocatorias = [ConvocatoriaGenerada.model_validate(p) for p in pubs]
         return out

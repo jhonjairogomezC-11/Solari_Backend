@@ -11,9 +11,12 @@ Principios de seguridad aplicados:
 from __future__ import annotations
 
 import logging
+from datetime import datetime
 
+import jwt
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core import mfa
 from app.core.config import Settings
 from app.core.exceptions import AuthError, ConflictError
 from app.core.security import (
@@ -40,7 +43,9 @@ from app.schemas.auth import (
     TokenResponse,
     UsuarioOut,
 )
+from app.schemas.seguridad import MfaRequeridoResponse
 from app.services.legal_service import LegalService
+from app.services.seguridad_service import MfaService, alertar_si_dispositivo_nuevo
 from app.services.token_service import TokenService
 
 logger = logging.getLogger("solari.auth")
@@ -63,13 +68,18 @@ class AuthService:
     # ─────────────── Construcción de respuesta ───────────────
 
     async def _emitir_sesion(
-        self, usuario: Usuario, *, ip: str | None, user_agent: str | None
+        self,
+        usuario: Usuario,
+        *,
+        ip: str | None,
+        user_agent: str | None,
+        inicio_sesion: datetime | None = None,
     ) -> TokenResponse:
         access, expires_in = create_access_token(
             self.settings, subject=str(usuario.id), rol=usuario.rol, estado=usuario.estado
         )
         refresh = await self.tokens.emitir_refresh_token(
-            usuario.id, ip=ip, user_agent=user_agent
+            usuario.id, ip=ip, user_agent=user_agent, inicio_sesion=inicio_sesion
         )
         return TokenResponse(
             usuario=UsuarioOut.model_validate(usuario),
@@ -187,7 +197,7 @@ class AuthService:
 
     async def login(
         self, email: str, password: str, *, ip: str | None, user_agent: str | None
-    ) -> TokenResponse:
+    ) -> TokenResponse | MfaRequeridoResponse:
         usuario = await self.repo.por_email_local(email)
 
         # Verificación en tiempo (casi) constante: si no hay usuario, igual gastamos
@@ -208,7 +218,50 @@ class AuthService:
         if needs_rehash(usuario.password_hash):
             usuario.password_hash = hash_password(password)
 
-        sesion = await self._emitir_sesion(usuario, ip=ip, user_agent=user_agent)
+        if usuario.mfa_activo:
+            # Segundo paso obligatorio: no se emiten tokens todavía.
+            await self.db.commit()
+            return self.respuesta_mfa_requerido(usuario)
+
+        sesion = await self.iniciar_sesion_interactiva(usuario, ip=ip, user_agent=user_agent)
+        await self.db.commit()
+        return sesion
+
+    # ─────────────── Verificación en dos pasos ───────────────
+
+    def respuesta_mfa_requerido(self, usuario: Usuario) -> MfaRequeridoResponse:
+        return MfaRequeridoResponse(
+            mfa_token=mfa.crear_mfa_token(self.settings, str(usuario.id)),
+            expires_in=mfa.MFA_TOKEN_TTL_SECONDS,
+        )
+
+    async def iniciar_sesion_interactiva(
+        self, usuario: Usuario, *, ip: str | None, user_agent: str | None
+    ) -> TokenResponse:
+        """Login completo (contraseña, MFA o Google): alerta de dispositivo nuevo + tokens."""
+        await alertar_si_dispositivo_nuevo(self.db, usuario, ip=ip, user_agent=user_agent)
+        return await self._emitir_sesion(usuario, ip=ip, user_agent=user_agent)
+
+    async def login_mfa(
+        self, mfa_token: str, codigo: str, *, ip: str | None, user_agent: str | None
+    ) -> TokenResponse:
+        try:
+            usuario_id = mfa.decodificar_mfa_token(self.settings, mfa_token)
+        except jwt.PyJWTError as exc:
+            raise AuthError(
+                "La verificación expiró. Vuelve a iniciar sesión con tu contraseña."
+            ) from exc
+
+        usuario = await self.repo.por_id(usuario_id)
+        if usuario is None or not usuario.mfa_activo:
+            raise AuthError("La verificación expiró. Vuelve a iniciar sesión con tu contraseña.")
+        if usuario.estado != ESTADO_ACTIVO:
+            raise AuthError("Tu cuenta no está activa. Contacta al soporte.")
+
+        if not MfaService(self.db, self.settings).verificar_segundo_factor(usuario, codigo):
+            raise AuthError("El código no es válido o ya fue usado.")
+
+        sesion = await self.iniciar_sesion_interactiva(usuario, ip=ip, user_agent=user_agent)
         await self.db.commit()
         return sesion
 
@@ -217,16 +270,22 @@ class AuthService:
     async def refresh(
         self, refresh_token: str, *, ip: str | None, user_agent: str | None
     ) -> TokenResponse:
-        usuario_id = await self.tokens.consumir_refresh_token(refresh_token)
-        if usuario_id is None:
+        registro = await self.tokens.consumir_refresh_token_registro(refresh_token)
+        if registro is None:
             raise AuthError("Refresh token inválido o expirado.")
 
-        usuario = await self.repo.por_id(usuario_id)
+        usuario = await self.repo.por_id(registro.usuario_id)
         if usuario is None or usuario.estado != ESTADO_ACTIVO:
             await self.db.commit()  # persiste la marca de usado
             raise AuthError("Sesión no válida.")
 
-        sesion = await self._emitir_sesion(usuario, ip=ip, user_agent=user_agent)
+        # La sesión rotada conserva su fecha de inicio original.
+        sesion = await self._emitir_sesion(
+            usuario,
+            ip=ip,
+            user_agent=user_agent,
+            inicio_sesion=registro.fecha_inicio_sesion or registro.fecha_creacion,
+        )
         await self.db.commit()
         # refresh no reenvía el usuario en el contrato del móvil, pero no estorba.
         return sesion

@@ -6,7 +6,7 @@ import re
 
 from fastapi import APIRouter
 from fastapi.responses import FileResponse
-from sqlalchemy import select
+from sqlalchemy import or_, select
 
 from app.api.deps import CurrentUser, DbDep
 from app.core.config import get_settings
@@ -40,7 +40,12 @@ async def descargar_privado(carpeta: str, nombre: str, db: DbDep, user: CurrentU
     if not autorizado:
         vol = (
             await db.execute(
-                select(Voluntario.usuario_id).where(Voluntario.documento_identidad == referencia)
+                select(Voluntario.usuario_id).where(
+                    or_(
+                        Voluntario.documento_identidad == referencia,
+                        Voluntario.autorizacion_acudiente == referencia,
+                    )
+                )
             )
         ).scalar_one_or_none()
         if vol is not None and vol == user.id:

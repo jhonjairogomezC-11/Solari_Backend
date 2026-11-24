@@ -22,3 +22,6 @@ uploads/
 
 # Documentos privados (identidad y verificación): nunca al repositorio
 private_uploads/
+
+# Copias de seguridad locales de la base
+backups/

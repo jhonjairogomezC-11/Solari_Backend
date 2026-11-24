@@ -6,7 +6,8 @@ from fastapi import UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
-from app.core.exceptions import ConflictError, ForbiddenError, NotFoundError
+from app.core.edad import validar_fecha_nacimiento
+from app.core.exceptions import AppError, ConflictError, ForbiddenError, NotFoundError
 from app.models.fundacion import ESTADO_PENDIENTE, Fundacion
 from app.models.usuario import ROL_FUNDACION, ROL_VOLUNTARIO, Usuario
 from app.models.voluntario import Voluntario
@@ -50,7 +51,12 @@ class PerfilService:
         existente = await self.repo.voluntario_por_usuario(usuario.id)
 
         if existente is None:
-            # Crear: validar que el documento no esté en uso por otro.
+            # Crear: edad mínima de 16 años (ver app/core/edad.py).
+            try:
+                validar_fecha_nacimiento(data.fecha_nacimiento)
+            except ValueError as exc:
+                raise AppError(str(exc), 422) from exc
+            # Validar que el documento no esté en uso por otro.
             if await self.repo.existe_numero_documento(data.numero_documento):
                 raise ConflictError("Ese número de documento ya está registrado.")
             perfil = Voluntario(

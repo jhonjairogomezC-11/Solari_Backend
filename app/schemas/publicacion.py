@@ -39,7 +39,7 @@ class PublicacionCreate(BaseModel):
     hora_inicio: time | None = None
     hora_fin: time | None = None
     cupo_maximo: int = Field(default=1, ge=1)
-    edad_minima: int | None = Field(default=None, ge=14)
+    edad_minima: int | None = Field(default=None, ge=16, le=100)
     edad_maxima: int | None = None
     requisitos_adicionales: str | None = None
     contacto_nombre: str | None = Field(default=None, max_length=150)
@@ -102,7 +102,7 @@ class PublicacionUpdate(BaseModel):
     hora_inicio: time | None = None
     hora_fin: time | None = None
     cupo_maximo: int | None = Field(default=None, ge=1)
-    edad_minima: int | None = Field(default=None, ge=14)
+    edad_minima: int | None = Field(default=None, ge=16, le=100)
     edad_maxima: int | None = None
     requisitos_adicionales: str | None = None
     contacto_nombre: str | None = Field(default=None, max_length=150)

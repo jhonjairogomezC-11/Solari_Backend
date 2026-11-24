@@ -60,4 +60,6 @@ class ProgramacionOut(BaseModel):
     proxima_fecha: date
     fecha_pausa: datetime | None = None
     fecha_creacion: datetime
+    # URLs de las fotos que se copian a cada convocatoria generada (la primera es portada).
+    imagenes: list[str] = []
     convocatorias: list[ConvocatoriaGenerada] = []

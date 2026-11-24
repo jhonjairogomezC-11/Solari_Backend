@@ -60,7 +60,10 @@ def register_exception_handlers(app: FastAPI) -> None:
         for err in exc.errors():
             loc = [str(p) for p in err.get("loc", []) if p not in ("body", "query", "path")]
             field = ".".join(loc) or "general"
-            errors.setdefault(field, []).append(err.get("msg", "Valor inválido."))
+            msg = str(err.get("msg", "Valor inválido."))
+            # Pydantic antepone «Value error, » a los ValueError de los validadores.
+            msg = msg.removeprefix("Value error, ")
+            errors.setdefault(field, []).append(msg)
         return JSONResponse(
             status_code=HTTP_422,
             content={"message": "Los datos enviados no son válidos.", "errors": errors},

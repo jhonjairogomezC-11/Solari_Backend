@@ -136,3 +136,42 @@ def decode_access_token(settings: Settings, token: str) -> dict[str, Any]:
             "verify_nbf": True,
         },
     )
+
+
+# ─────────────────────────── Ticket SSE ───────────────────────────
+# EventSource no puede enviar la cabecera Authorization, así que el cliente pide
+# (con su JWT de acceso) un ticket de vida corta y lo pasa en la URL del stream.
+# El ticket lleva typ="sse" y NO lleva `jti`: decode_access_token exige `jti`, así
+# que un ticket filtrado en un log no sirve como token de acceso, y un token de
+# acceso tampoco sirve como ticket (no tiene typ="sse").
+
+SSE_TICKET_TYP = "sse"
+SSE_TICKET_TTL_SECONDS = 60
+
+
+def create_sse_ticket(
+    settings: Settings, *, subject: str, ttl_seconds: int = SSE_TICKET_TTL_SECONDS
+) -> tuple[str, int]:
+    """Crea un ticket firmado para abrir el stream de notificaciones."""
+    now = datetime.now(UTC)
+    payload: dict[str, Any] = {
+        "typ": SSE_TICKET_TYP,
+        "sub": str(subject),
+        "iat": int(now.timestamp()),
+        "exp": int((now + timedelta(seconds=ttl_seconds)).timestamp()),
+    }
+    token = jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
+    return token, ttl_seconds
+
+
+def decode_sse_ticket(settings: Settings, ticket: str) -> dict[str, Any]:
+    """Valida un ticket SSE. Lanza jwt.PyJWTError si es inválido, vencido o de otro tipo."""
+    payload = jwt.decode(
+        ticket,
+        settings.jwt_secret,
+        algorithms=[settings.jwt_algorithm],
+        options={"require": ["exp", "iat", "sub", "typ"], "verify_exp": True},
+    )
+    if payload.get("typ") != SSE_TICKET_TYP:
+        raise jwt.InvalidTokenError("El token no es un ticket SSE.")
+    return payload

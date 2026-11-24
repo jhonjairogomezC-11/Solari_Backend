@@ -14,6 +14,7 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
+from app.core.mfa import truncar
 from app.core.security import generate_opaque_token, hash_opaque_token
 from app.models.tokens import RecuperacionPassword, RefreshToken, VerificacionEmail
 
@@ -30,24 +31,33 @@ class TokenService:
     # ─────────────── Refresh tokens ───────────────
 
     async def emitir_refresh_token(
-        self, usuario_id: uuid.UUID, *, ip: str | None = None, user_agent: str | None = None
+        self,
+        usuario_id: uuid.UUID,
+        *,
+        ip: str | None = None,
+        user_agent: str | None = None,
+        inicio_sesion: datetime | None = None,
     ) -> str:
+        """Emite un refresh token. `inicio_sesion` se conserva al rotar (sesiones activas)."""
         raw = generate_opaque_token()
+        ahora = _now()
         self.db.add(
             RefreshToken(
                 usuario_id=usuario_id,
                 token=None,
                 token_hash=hash_opaque_token(raw),
-                expiracion=_now() + timedelta(minutes=self.settings.jwt_refresh_ttl_minutes),
+                expiracion=ahora + timedelta(minutes=self.settings.jwt_refresh_ttl_minutes),
                 usado=False,
-                ip_solicitud=ip,
-                user_agent=user_agent,
+                ip_solicitud=truncar(ip, 50),
+                user_agent=truncar(user_agent, 255),
+                fecha_ultimo_uso=ahora,
+                fecha_inicio_sesion=inicio_sesion or ahora,
             )
         )
         return raw
 
-    async def consumir_refresh_token(self, raw: str) -> uuid.UUID | None:
-        """Valida y marca como usado (rotación). Devuelve el usuario_id o None."""
+    async def consumir_refresh_token_registro(self, raw: str) -> RefreshToken | None:
+        """Valida y marca como usado (rotación). Devuelve el registro consumido o None."""
         th = hash_opaque_token(raw)
         stmt = select(RefreshToken).where(
             RefreshToken.token_hash == th,
@@ -59,7 +69,12 @@ class TokenService:
             return None
         registro.usado = True
         registro.fecha_uso = _now()
-        return registro.usuario_id
+        return registro
+
+    async def consumir_refresh_token(self, raw: str) -> uuid.UUID | None:
+        """Valida y marca como usado (rotación). Devuelve el usuario_id o None."""
+        registro = await self.consumir_refresh_token_registro(raw)
+        return registro.usuario_id if registro else None
 
     async def revocar_refresh_tokens(self, usuario_id: uuid.UUID) -> int:
         stmt = (

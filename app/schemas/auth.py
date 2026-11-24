@@ -11,6 +11,7 @@ from datetime import date
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 
 from app.core.config import get_settings
+from app.core.edad import validar_fecha_nacimiento
 
 _settings = get_settings()
 
@@ -126,6 +127,11 @@ class RegisterVoluntarioRequest(BaseModel):
         if v not in TIPOS_DOCUMENTO:
             raise ValueError(f"tipo_documento inválido. Valores: {sorted(TIPOS_DOCUMENTO)}")
         return v
+
+    @field_validator("fecha_nacimiento")
+    @classmethod
+    def _edad_minima(cls, v: date) -> date:
+        return validar_fecha_nacimiento(v)
 
     @field_validator("genero")
     @classmethod

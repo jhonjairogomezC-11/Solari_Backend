@@ -63,7 +63,11 @@ CREATE TABLE usuarios (
     estado estado_usuario NOT NULL DEFAULT 'ACTIVO',
     email_verificado boolean NOT NULL DEFAULT false,
     fecha_registro timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    fecha_actualizacion timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+    fecha_actualizacion timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    mfa_secret text,
+    mfa_activo boolean NOT NULL DEFAULT false,
+    mfa_codigos_respaldo jsonb,
+    mfa_ultimo_paso bigint
 );
 CREATE UNIQUE INDEX idx_email_provider_unique ON usuarios(email, provider);
 
@@ -137,7 +141,9 @@ CREATE TABLE refresh_tokens (
     fecha_uso timestamp,
     ip_solicitud varchar(50),
     user_agent text,
-    fecha_creacion timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+    fecha_creacion timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    fecha_ultimo_uso timestamp,
+    fecha_inicio_sesion timestamp
 );
 
 CREATE TABLE recuperacion_password (

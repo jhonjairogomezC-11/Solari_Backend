@@ -63,6 +63,12 @@ from app.schemas.postulacion import (
     VoluntarioPostulante,
 )
 from app.services.coincidencia import calcular_coincidencia
+from app.services.menores_service import (
+    calcular_edad,
+    es_menor,
+    estado_autorizacion,
+    validar_aceptacion_menor,
+)
 from app.services.notificacion_service import NotificacionService
 
 RETIRABLES = (ESTADO_PENDIENTE, ESTADO_EN_REVISION, ESTADO_LISTA_ESPERA, ESTADO_ACEPTADO)
@@ -74,8 +80,8 @@ def _now() -> datetime:
 
 
 def _edad(nacimiento: date) -> int:
-    hoy = date.today()
-    return hoy.year - nacimiento.year - ((hoy.month, hoy.day) < (nacimiento.month, nacimiento.day))
+    # Edad con la fecha de Bogotá (misma regla que la autorización de menores).
+    return calcular_edad(nacimiento)
 
 
 def _page(filas, total, page, per_page):
@@ -293,6 +299,11 @@ class PostulacionService:
         # Bloqueo de la convocatoria: la validación de cupo y el cambio son atómicos.
         pub = await self.pub_repo.por_id_bloqueada(post.publicacion_id)
         titulo = pub.titulo if pub else "una convocatoria"
+        if data.estado == ESTADO_ACEPTADO:
+            # Menores: solo con la autorización del acudiente aprobada.
+            vol = await self.db.get(Voluntario, post.voluntario_id)
+            if vol is not None:
+                validar_aceptacion_menor(vol.fecha_nacimiento, vol.autorizacion_estado)
         if data.estado == ESTADO_ACEPTADO and pub is not None:
             ocupados = await self.repo.contar_aceptadas(pub.id)
             if ocupados >= pub.cupo_maximo:
@@ -459,6 +470,12 @@ class PostulacionService:
                         nombres_req[i] for i in req_ids if i in poseidas
                     ),
                     coincidencia=calcular_coincidencia(req_ids, poseidas.keys()),
+                    menor_de_edad=es_menor(v.fecha_nacimiento),
+                    autorizacion_estado=(
+                        estado_autorizacion(v.fecha_nacimiento, v.autorizacion_estado)
+                        if es_menor(v.fecha_nacimiento)
+                        else None
+                    ),
                 )
             data.append(out)
 
