@@ -24,6 +24,7 @@ from app.schemas.admin import (
     PaginatedAdmin,
     VerificarFundacion,
     VerificarVoluntario,
+    RechazarDocumentoVoluntario,
 )
 from app.schemas.catalogo import (
     AreaImpactoOut,
@@ -162,6 +163,13 @@ async def verificar_voluntario(
     voluntario_id: str, body: VerificarVoluntario, db: DbDep, admin: CurrentUser
 ):
     return await AdminService(db).verificar_voluntario(admin.id, voluntario_id, body.verificado)
+
+
+@router.post("/voluntarios/{voluntario_id}/rechazar-documento", response_model=AdminVoluntarioOut)
+async def rechazar_documento_voluntario(
+    voluntario_id: str, body: RechazarDocumentoVoluntario, db: DbDep, admin: CurrentUser
+):
+    return await AdminService(db).rechazar_documento_voluntario(admin.id, voluntario_id, body.motivo)
 
 
 # ---------------------------------------------------------------------------

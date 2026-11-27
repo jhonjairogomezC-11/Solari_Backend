@@ -259,7 +259,7 @@ class AdminRepository:
             .join(Usuario, Usuario.id == Voluntario.usuario_id)
         )
         data_stmt = (
-            select(Voluntario, Usuario.nombre, Usuario.email)
+            select(Voluntario, Usuario.nombre, Usuario.email, Usuario.telefono)
             .join(Usuario, Usuario.id == Voluntario.usuario_id)
             .order_by(Voluntario.fecha_creacion.desc())
         )

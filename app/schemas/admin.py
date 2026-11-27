@@ -180,10 +180,19 @@ class AdminVoluntarioOut(BaseModel):
     usuario_id: uuid.UUID
     nombre: str | None = None
     email: str | None = None
+    telefono: str | None = None
     tipo_documento: str
     numero_documento: str
+    fecha_nacimiento: date | None = None
+    genero: str | None = None
+    municipio_id: int | None = None
+    disponibilidad: str | None = None
+    experiencia: str | None = None
+    direccion: str | None = None
+    descripcion: str | None = None
     foto_perfil: str | None = None
     documento_identidad: str | None = None
+    motivo_rechazo_documento: str | None = None
     esta_verificado: bool
     fecha_creacion: datetime
 
@@ -191,6 +200,11 @@ class AdminVoluntarioOut(BaseModel):
 class VerificarVoluntario(BaseModel):
     model_config = ConfigDict(extra="forbid")
     verificado: bool
+
+
+class RechazarDocumentoVoluntario(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    motivo: str = Field(min_length=10, max_length=500, description="Motivo del rechazo del documento.")
 
 
 # ---------------------------------------------------------------------------

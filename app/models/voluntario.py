@@ -70,5 +70,6 @@ class Voluntario(Base):
     actividades_completadas: Mapped[int] = mapped_column(
         Integer, default=0, server_default=text("0")
     )
+    motivo_rechazo_documento: Mapped[str | None] = mapped_column(Text, nullable=True)
     fecha_creacion: Mapped[datetime] = mapped_column(server_default=text("CURRENT_TIMESTAMP"))
     fecha_actualizacion: Mapped[datetime] = mapped_column(server_default=text("CURRENT_TIMESTAMP"))

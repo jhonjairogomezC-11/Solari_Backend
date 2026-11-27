@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import ConflictError, ForbiddenError, NotFoundError
+from app.services.notificacion_service import NotificacionService
 from app.models.fundacion import (
     ESTADO_APROBADA,
     ESTADO_PENDIENTE,
@@ -322,10 +323,11 @@ class AdminService:
             page, per_page, verificado, con_documento, buscar
         )
         data = []
-        for vol, nombre, email in rows:
+        for vol, nombre, email, telefono in rows:
             dto = AdminVoluntarioOut.model_validate(vol)
             dto.nombre = nombre
             dto.email = email
+            dto.telefono = telefono
             data.append(dto)
         pages = (total + per_page - 1) // per_page if per_page else 1
         return {"data": data, "total": total, "page": page, "per_page": per_page, "pages": pages}
@@ -343,8 +345,39 @@ class AdminService:
             anterior={"verificado": vol.esta_verificado}, nuevo={"verificado": verificado},
         )
         vol.esta_verificado = verificado
-        # Nota: no se notifica porque el enum tipo_notificacion actual no tiene un
-        # tipo apropiado para la verificación de voluntarios (requeriría migración).
+        vol.motivo_rechazo_documento = None  # limpiar rechazo previo si se aprueba
+        await NotificacionService(self.db).notificar(
+            vol.usuario_id,
+            "VERIFICACION_ACTUALIZADA",
+            "✅ Tu identidad ha sido verificada. Ya tienes la insignia de voluntario verificado.",
+            objeto_tipo="voluntario",
+            objeto_id=vol.id,
+        )
+        await self.db.commit()
+        await self.db.refresh(vol)
+        dto = AdminVoluntarioOut.model_validate(vol)
+        return dto
+
+    async def rechazar_documento_voluntario(
+        self, admin_id: uuid.UUID, voluntario_id: str, motivo: str
+    ):
+        vol = await self.repo.voluntario_por_id(voluntario_id)
+        if vol is None:
+            raise NotFoundError("Voluntario no encontrado.")
+        await self.audit.registrar(
+            admin_id, "VOLUNTARIO_VERIFICADO", objeto_tipo="voluntario", objeto_id=vol.id,
+            anterior={"verificado": vol.esta_verificado, "motivo": None},
+            nuevo={"verificado": False, "motivo": motivo},
+        )
+        vol.esta_verificado = False
+        vol.motivo_rechazo_documento = motivo
+        await NotificacionService(self.db).notificar(
+            vol.usuario_id,
+            "VERIFICACION_ACTUALIZADA",
+            f"❌ Tu documento de identidad fue rechazado. Motivo: {motivo}. Por favor sube un nuevo documento desde tu perfil.",
+            objeto_tipo="voluntario",
+            objeto_id=vol.id,
+        )
         await self.db.commit()
         await self.db.refresh(vol)
         dto = AdminVoluntarioOut.model_validate(vol)
