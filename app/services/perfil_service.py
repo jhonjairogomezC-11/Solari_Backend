@@ -213,3 +213,14 @@ class PerfilService:
         perfil.logo = url
         await self.db.commit()
         return url
+
+    async def subir_banner_fundacion(self, usuario: Usuario, file: UploadFile) -> str:
+        if usuario.rol != ROL_FUNDACION:
+            raise ForbiddenError("Solo las fundaciones pueden subir su banner.")
+        perfil = await self.repo.fundacion_por_usuario(usuario.id)
+        if perfil is None:
+            raise NotFoundError("Primero completa el perfil de tu fundación.")
+        url = await self.storage.guardar_imagen(file, "banners")
+        perfil.imagen_banner = url
+        await self.db.commit()
+        return url

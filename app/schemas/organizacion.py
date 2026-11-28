@@ -111,6 +111,7 @@ class OrganizacionPublicaOut(BaseModel):
     tipo_organizacion: str
     constituida_legalmente: bool
     logo: str | None = None
+    imagen_banner: str | None = None
     descripcion: str
     historia: str | None = None
     mision: str | None = None

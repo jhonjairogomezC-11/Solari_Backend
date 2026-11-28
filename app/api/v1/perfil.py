@@ -89,3 +89,11 @@ async def subir_logo_fundacion(
 ):
     url = await PerfilService(db).subir_logo_fundacion(user, archivo)
     return ArchivoSubidoOut(url=url)
+
+
+@router.post("/fundacion/banner", response_model=ArchivoSubidoOut)
+async def subir_banner_fundacion(
+    db: DbDep, user: CurrentUser, archivo: Annotated[UploadFile, File()]
+):
+    url = await PerfilService(db).subir_banner_fundacion(user, archivo)
+    return ArchivoSubidoOut(url=url)

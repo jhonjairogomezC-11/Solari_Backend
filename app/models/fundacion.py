@@ -46,6 +46,7 @@ class Fundacion(Base):
     descripcion: Mapped[str] = mapped_column(Text)
     documento_legal: Mapped[str | None] = mapped_column(Text, nullable=True)
     logo: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    imagen_banner: Mapped[str | None] = mapped_column(String(500), nullable=True)
     # ── Perfil público y verificación documental (aditivos) ──
     tipo_organizacion: Mapped[str] = mapped_column(
         String(30), default="FUNDACION", server_default=text("'FUNDACION'")
